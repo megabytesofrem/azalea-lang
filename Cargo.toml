@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["src/azalea_front", "src/azalea_main"]

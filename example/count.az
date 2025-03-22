@@ -1,0 +1,15 @@
+-- Comment?
+
+record App = {
+  count: 0
+}
+
+let app: App = App {count: 0}
+
+fn mk_app(): App = App {count: 0}
+
+fn increment(app: App): Unit = app.count += 1
+
+fn decrement(app: App): Unit = app.count -= 1
+
+fn get_count(app: App): Int = app.count
