@@ -21,9 +21,9 @@ impl<T> Span<T> {
     }
 
     pub fn flat_map<U, F: FnOnce(T) -> Span<U>>(self, f: F) -> Span<U> {
-        let Span = f(self.target);
+        let span = f(self.target);
         Span {
-            target: Span.target,
+            target: span.target,
             loc: self.loc,
         }
     }
@@ -33,9 +33,9 @@ impl<T> Span<T> {
     where
         F: FnOnce(T) -> Result<U, E>,
     {
-        let Span = f(self.target)?;
+        let span = f(self.target)?;
         Ok(Span {
-            target: Span,
+            target: span,
             loc: self.loc,
         })
     }

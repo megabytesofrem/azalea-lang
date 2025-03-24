@@ -20,6 +20,12 @@ pub struct Record {
 }
 
 #[derive(Debug, Clone)]
+pub struct Enum {
+    pub name: String,
+    pub variants: Vec<(String, Option<Ty>)>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
     pub args: Vec<(String, Ty)>,

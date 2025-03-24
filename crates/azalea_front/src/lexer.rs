@@ -10,7 +10,7 @@ pub struct SourceLoc {
 }
 
 #[derive(Debug, Clone, PartialEq, Logos)]
-pub enum TokenKind {
+pub enum TokenKind<'a> {
     #[token("+")]
     Plus,
     #[token("-")]
@@ -45,12 +45,18 @@ pub enum TokenKind {
     Arrow,
 
     // Keywords
+    #[token("pub")]
+    KwPub,
+    #[token("const")]
+    KwConst,
     #[token("let")]
     KwLet,
     #[token("fn")]
     KwFn,
     #[token("record")]
     KwRecord,
+    #[token("enum")]
+    KwEnum,
     #[token("import")]
     KwImport,
     #[token("if")]
@@ -67,6 +73,14 @@ pub enum TokenKind {
     KwEnd,
     #[token("return")]
     KwReturn,
+    #[token("true")]
+    KwTrue,
+    #[token("false")]
+    KwFalse,
+
+    #[regex(r"Int|Float|String|Bool|Unit")]
+    KwType(&'a str),
+
     // Literals
     #[regex(r"[_a-zA-Z][_0-9a-zA-Z]*")]
     Name,
@@ -111,7 +125,7 @@ pub enum Op {
 
 #[derive(Debug, Clone)]
 pub struct Token<'a> {
-    pub kind: TokenKind,
+    pub kind: TokenKind<'a>,
     pub location: SourceLoc,
     pub literal: &'a str,
 }
@@ -121,7 +135,7 @@ pub type LexerIter<'a> = Peekable<Box<TokenIter<'a>>>;
 
 #[derive(Clone)]
 pub struct TokenIter<'a> {
-    inner: SpannedIter<'a, TokenKind>,
+    inner: SpannedIter<'a, TokenKind<'a>>,
     src: &'a str,
 }
 

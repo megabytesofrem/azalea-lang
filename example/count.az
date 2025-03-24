@@ -1,5 +1,7 @@
 -- Comment?
 
+-- Do we use snake_case or camelCase as a convention?
+
 record App = {
   count: 0
 }
