@@ -7,10 +7,22 @@ pub enum Ty {
     String,
     Bool,
     Unit,
+
+    /// Represents a type that we don't know yet, will be resolved later on
+    UnknownForNow,
     User(String),
-    Function(Box<Function>),
+    Array(Box<Ty>),
+
+    /// Allows us to pass functions around as values
+    Fn(Box<Function>),
+
+    /// Record and enum types
     Record(Box<Record>),
+    Enum(Box<Enum>),
 }
+
+/// A pair of a name and a type
+pub type TypedPair = (String, Ty);
 
 /// Records are semantically equivalent to JavaScript objects
 #[derive(Debug, Clone)]

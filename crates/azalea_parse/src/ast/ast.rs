@@ -14,7 +14,7 @@ pub enum Literal {
 #[derive(Debug, Clone)]
 pub struct Member {
     pub target: Box<Span<Expr>>,
-    pub ty: Ty,
+    pub name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ pub enum Stmt {
         body: Box<Block>,
     },
 
-    /// A `let` statement, not to be confused with a binding
+    /// A `let` statement, *not* a binding
     Let {
         name: String,
         ty: Ty,
@@ -53,17 +53,19 @@ pub enum Stmt {
 pub enum Expr {
     Literal(Literal),
     Ident(String),
-    Member(Member),
+    MemberAccess(Member),
 
+    Array(Vec<Span<Expr>>),
     Binop(Box<Span<Expr>>, Op, Box<Span<Expr>>),
     Unop(Op, Box<Span<Expr>>),
 
-    /// A function call
+    /// A function call: f(x, y)
     FnCall {
         target: Box<Span<Expr>>,
         args: Vec<Span<Expr>>,
     },
 
+    /// A lambda expression: \(x) -> x + 1
     Lam {
         args: Vec<(String, Ty)>,
         return_ty: Ty,

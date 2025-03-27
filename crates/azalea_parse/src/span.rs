@@ -40,3 +40,7 @@ impl<T> Span<T> {
         })
     }
 }
+
+pub fn spanned<T: Clone>(target: T, loc: SourceLoc) -> Span<T> {
+    Span::new(target, loc)
+}

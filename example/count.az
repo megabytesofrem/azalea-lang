@@ -3,7 +3,7 @@
 -- Do we use snake_case or camelCase as a convention?
 
 record App = {
-  count: 0
+  count: Int
 }
 
 let app: App = App {count: 0}

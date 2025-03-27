@@ -10,7 +10,7 @@ pub struct SourceLoc {
 }
 
 #[derive(Debug, Clone, PartialEq, Logos)]
-pub enum TokenKind<'a> {
+pub enum TokenKind {
     #[token("+")]
     Plus,
     #[token("-")]
@@ -39,6 +39,18 @@ pub enum TokenKind<'a> {
     Colon,
     #[token("=")]
     Eq,
+    #[token("==")]
+    DoubleEq,
+    #[token("!=")]
+    NotEq,
+    #[token("<")]
+    Less,
+    #[token("<=")]
+    LessEq,
+    #[token(">")]
+    Greater,
+    #[token(">=")]
+    GreaterEq,
     #[token("\\")]
     Lambda,
     #[token("->")]
@@ -49,6 +61,8 @@ pub enum TokenKind<'a> {
     KwPub,
     #[token("const")]
     KwConst,
+    #[token("where")]
+    KwWhere,
     #[token("let")]
     KwLet,
     #[token("fn")]
@@ -78,8 +92,8 @@ pub enum TokenKind<'a> {
     #[token("false")]
     KwFalse,
 
-    #[regex(r"Int|Float|String|Bool|Unit")]
-    KwType(&'a str),
+    #[regex(r"Int|Float|String|Bool|Unit", |lex| lex.slice().to_owned())]
+    KwType(String),
 
     // Literals
     #[regex(r"[_a-zA-Z][_0-9a-zA-Z]*")]
@@ -106,13 +120,13 @@ pub enum TokenKind<'a> {
     NewLine,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Op {
     Add,
     Sub,
     Mul,
     Div,
-    Eq,
+    DoubleEq,
     NotEq,
     Less,
     LessEq,
@@ -125,7 +139,7 @@ pub enum Op {
 
 #[derive(Debug, Clone)]
 pub struct Token<'a> {
-    pub kind: TokenKind<'a>,
+    pub kind: TokenKind,
     pub location: SourceLoc,
     pub literal: &'a str,
 }
@@ -135,13 +149,23 @@ pub type LexerIter<'a> = Peekable<Box<TokenIter<'a>>>;
 
 #[derive(Clone)]
 pub struct TokenIter<'a> {
-    inner: SpannedIter<'a, TokenKind<'a>>,
+    inner: SpannedIter<'a, TokenKind>,
     src: &'a str,
 }
 
 impl fmt::Display for SourceLoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(L{}, C{}:{})", self.line, self.start, self.end)
+    }
+}
+
+impl Default for SourceLoc {
+    fn default() -> Self {
+        Self {
+            line: 1,
+            start: 0,
+            end: 0,
+        }
     }
 }
 

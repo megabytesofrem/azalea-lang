@@ -1,6 +1,6 @@
 /// The Azalea compiler
 /// Copyright (c) 2024 Rem
-use azalea_front::lexer::lex_tokens;
+use azalea_parse::lexer::lex_tokens;
 
 fn main() {
     let src = include_str!("../../../example/types.az");
