@@ -1,6 +1,7 @@
 use super::ast_types::Ty;
 use crate::{lexer::Op, span::Span};
 
+/// A block of statements delimited by `do` and `end`
 pub type Block = Vec<Span<Stmt>>;
 
 #[derive(Debug, Clone)]
@@ -22,6 +23,13 @@ pub enum Stmt {
     /// An expression, used in place of a statement
     Expr(Span<Expr>),
 
+    /// A `let` statement, *not* a binding
+    Let {
+        name: String,
+        ty: Ty,
+        value: Box<Span<Expr>>,
+    },
+
     /// A record declaration
     RecordDecl {
         name: String,
@@ -30,7 +38,7 @@ pub enum Stmt {
 
     EnumDecl {
         name: String,
-        variants: Vec<(String, Option<Ty>)>,
+        variants: Vec<String>,
     },
 
     /// A function declaration
@@ -40,13 +48,6 @@ pub enum Stmt {
         return_ty: Ty,
         body: Box<Block>,
     },
-
-    /// A `let` statement, *not* a binding
-    Let {
-        name: String,
-        ty: Ty,
-        value: Box<Span<Expr>>,
-    },
 }
 
 #[derive(Debug, Clone)]
@@ -55,9 +56,21 @@ pub enum Expr {
     Ident(String),
     MemberAccess(Member),
 
-    Array(Vec<Span<Expr>>),
-    Binop(Box<Span<Expr>>, Op, Box<Span<Expr>>),
-    Unop(Op, Box<Span<Expr>>),
+    BinOp(Box<Span<Expr>>, Op, Box<Span<Expr>>),
+    UnOp(Op, Box<Span<Expr>>),
+
+    Record {
+        fields: Vec<(String, Ty)>,
+    },
+
+    Array {
+        elements: Vec<Span<Expr>>,
+    },
+
+    ArrayIndex {
+        target: Box<Span<Expr>>,
+        index: Box<Span<Expr>>,
+    },
 
     /// A function call: f(x, y)
     FnCall {
