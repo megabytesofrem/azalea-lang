@@ -1,10 +1,10 @@
-use super::ast_types::Ty;
+use super::ast_types::{Enum, Function, Record, Ty};
 use crate::{lexer::Op, span::Span};
 
 /// A block of statements delimited by `do` and `end`
 pub type Block = Vec<Span<Stmt>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Int(i32),
     Float(f32),
@@ -12,13 +12,13 @@ pub enum Literal {
     Bool(bool),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Member {
     pub target: Box<Span<Expr>>,
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// An expression, used in place of a statement
     Expr(Span<Expr>),
@@ -31,26 +31,15 @@ pub enum Stmt {
     },
 
     /// A record declaration
-    RecordDecl {
-        name: String,
-        fields: Vec<(String, Ty)>,
-    },
+    RecordDecl(Record),
 
-    EnumDecl {
-        name: String,
-        variants: Vec<String>,
-    },
+    EnumDecl(Enum),
 
     /// A function declaration
-    FnDecl {
-        name: String,
-        args: Vec<(String, Ty)>,
-        return_ty: Ty,
-        body: Box<Block>,
-    },
+    FnDecl(Function),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Ident(String),
@@ -59,9 +48,7 @@ pub enum Expr {
     BinOp(Box<Span<Expr>>, Op, Box<Span<Expr>>),
     UnOp(Op, Box<Span<Expr>>),
 
-    Record {
-        fields: Vec<(String, Ty)>,
-    },
+    Record(Record),
 
     Array {
         elements: Vec<Span<Expr>>,

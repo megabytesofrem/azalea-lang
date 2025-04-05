@@ -2,7 +2,7 @@ use std::{fmt, iter::Peekable};
 
 use logos::{Logos, SpannedIter};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SourceLoc {
     pub line: usize,
     pub start: usize,

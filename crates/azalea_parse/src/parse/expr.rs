@@ -2,7 +2,7 @@
 
 use super::syntax_error::SyntaxError;
 use super::{Assoc, Parser};
-use crate::ast::ast_types::Ty;
+use crate::ast::ast_types::{Record, Ty};
 use crate::lexer::{Token, TokenKind};
 use crate::parse::base as parser;
 use crate::span::{Span, spanned};
@@ -262,6 +262,12 @@ impl<'a> Parser<'a> {
 
         self.expect(TokenKind::RBrace)?;
 
-        Ok(spanned(Expr::Record { fields }, location))
+        Ok(spanned(
+            Expr::Record(Record {
+                name: "".to_string(),
+                fields,
+            }),
+            location,
+        ))
     }
 }

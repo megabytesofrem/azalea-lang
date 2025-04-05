@@ -4,6 +4,9 @@ use super::syntax_error::SyntaxError;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::Stmt;
+use crate::ast::ast_types::Enum;
+use crate::ast::ast_types::Function;
+use crate::ast::ast_types::Record;
 use crate::ast::ast_types::Ty;
 use crate::lexer::TokenKind;
 use crate::span::Span;
@@ -110,10 +113,10 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RBrace)?;
 
         Ok(spanned(
-            Stmt::RecordDecl {
+            Stmt::RecordDecl(Record {
                 name: name.to_string(),
                 fields: record_fields,
-            },
+            }),
             location,
         ))
     }
@@ -141,10 +144,10 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RBrace)?;
 
         Ok(spanned(
-            Stmt::EnumDecl {
+            Stmt::EnumDecl(Enum {
                 name: name.to_string(),
                 variants: enum_variants,
-            },
+            }),
             location,
         ))
     }
@@ -184,14 +187,8 @@ impl<'a> Parser<'a> {
             body.push(spanned(Stmt::Expr(expr), location.clone()));
         }
 
-        Ok(spanned(
-            Stmt::FnDecl {
-                name: name.to_string(),
-                args,
-                return_ty,
-                body: Box::new(body),
-            },
-            location,
-        ))
+        let func = Function::new_with_stmts(name.to_string(), args, return_ty, body);
+
+        Ok(spanned(Stmt::FnDecl(func), location))
     }
 }

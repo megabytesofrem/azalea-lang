@@ -1,6 +1,6 @@
 use super::lexer::SourceLoc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Span<T> {
     pub target: T,
     pub loc: SourceLoc,

@@ -1,0 +1,8 @@
+[package]
+name = "azalea_typeck"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+azalea_parse = { path = "../azalea_parse" }
+thiserror = "2.0.12"

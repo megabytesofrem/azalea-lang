@@ -59,7 +59,8 @@ impl<'a> Parser<'a> {
                 "fn" => self.parse_fn_type(),
 
                 // User defined types
-                _ => Ok(Ty::User(token.literal.to_string())),
+                // TODO: Handle generic instantiation
+                _ => Ok(Ty::Instantiated(token.literal.to_string(), Vec::new())),
             },
 
             _ => Err(SyntaxError::ExpectedType(token.location)),
@@ -86,12 +87,10 @@ impl<'a> Parser<'a> {
         let return_ty = self.parse_typename()?;
 
         // TODO: Should we generate unique type names for fn types?
-        Ok(Ty::Fn(Box::new(Function {
-            name: String::new(),
-            args: types.into_iter().map(|ty| ("".to_string(), ty)).collect(),
-            return_ty,
-            body: Vec::new(),
-        })))
+        let args = types.into_iter().map(|ty| ("".to_string(), ty)).collect();
+        let func = Function::new_with_empty("lambda".to_string(), args, return_ty);
+
+        Ok(Ty::Fn(Box::new(func)))
     }
 
     pub(crate) fn parse_typed_pair(&mut self) -> parser::Return<TypedPair> {
