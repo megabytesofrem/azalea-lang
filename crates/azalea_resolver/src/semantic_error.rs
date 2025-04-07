@@ -2,7 +2,7 @@ use azalea_parse::{ast::ast_types::Ty, lexer::SourceLoc};
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
-pub enum TypeError {
+pub enum SemanticError {
     #[error("Unification error: {0}")]
     UnificationError(String),
 

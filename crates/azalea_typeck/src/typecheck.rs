@@ -5,18 +5,21 @@ use azalea_parse::ast::{Expr, Literal, Stmt};
 use azalea_parse::lexer::SourceLoc;
 use azalea_parse::span::Span;
 
-use crate::Return;
-use crate::resolver::Resolver;
-use crate::type_error::TypeError;
+// Name and scope resolution
+use azalea_resolver::resolver::Resolver;
+use azalea_resolver::semantic_error::SemanticError;
 
-/// A substitution is a mapping from type variables (e.g t0) to types.
-pub type Subst = HashMap<String, Ty>;
+use crate::Return;
+
+/// A typing environment is a mapping from type variables to types.
+pub type TypingEnv = HashMap<String, Ty>;
 
 /// The type checker is based on a simplified version of the Hindley-Milner type system.
-/// The only thing it doesn't implement is **let polymorphism**, but we shouldn't really need it.
 ///
 /// It performs the process of both type inference and unification.
-/// See: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
+/// See:
+/// - https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
+/// - https://steshaw.org/hm/hindley-milner.pdf
 
 #[derive(Debug, Clone)]
 pub struct Typechecker {
@@ -25,7 +28,7 @@ pub struct Typechecker {
     pub resolver: Resolver,
 
     /// During type checking, we collect errors and bubble them up
-    pub errors: Vec<TypeError>,
+    pub errors: Vec<SemanticError>,
 }
 
 impl Typechecker {
@@ -52,6 +55,11 @@ impl Typechecker {
             Ty::Var(v) => v == var,
             Ty::Array(inner) => self.occurs_check(var, inner),
 
+            Ty::Constructed(ctor, params) => {
+                // Check if the type variable occurs in the constructor name
+                ctor == var && params.iter().any(|param| self.occurs_check(var, param))
+            }
+
             // Check if type variable occurs in function arguments or return type
             Ty::Fn(func) => {
                 let arg_occurs = func.args.iter().any(|(_, aty)| self.occurs_check(var, aty));
@@ -75,25 +83,13 @@ impl Typechecker {
         }
     }
 
-    /// Given the types `t1` and `t2`, this function attempts to unify them following the laws.
-    ///
-    /// - If both types are the same primitive type, they unify.
-    ///
-    /// - If one type is a (type)variable, we create a substitution binding that binds
-    ///   the variable to the other type.
-    ///
-    /// - If both types are instantiated types with the same name and the same number of type parameters,
-    ///  we unify their type parameters.
-    ///
-    /// A bunch of other cases are handled that I can't be bothered to write down
-    /// In all other cases, unification fails.
-    pub fn unify(&mut self, t1: &Ty, t2: &Ty, location: SourceLoc) -> Return<Subst> {
+    /// Attempt to unify two types `t1` and `t2` within a typing environment `env`.
+    pub fn unify(&mut self, t1: &Ty, t2: &Ty, location: SourceLoc) -> Return<TypingEnv> {
         match (t1, t2) {
-            (Ty::Int, Ty::Int) => Ok(HashMap::new()),
-            (Ty::Float, Ty::Float) => Ok(HashMap::new()),
-            (Ty::String, Ty::String) => Ok(HashMap::new()),
-            (Ty::Bool, Ty::Bool) => Ok(HashMap::new()),
-            (Ty::Unit, Ty::Unit) => Ok(HashMap::new()),
+            (t1, t2) if t1 == t2 => {
+                // If both types are the same, return an empty substitution
+                Ok(HashMap::new())
+            }
 
             // If one type is a variable, create a substitution binding that
             // variable to the other type. Need to occurs check.
@@ -102,7 +98,7 @@ impl Typechecker {
 
                 // Occurs check
                 if self.occurs_check(var, ty) {
-                    return Err(TypeError::OccursCheck { location });
+                    return Err(SemanticError::OccursCheck { location });
                 } else {
                     subst.insert(var.clone(), ty.clone());
                 }
@@ -110,14 +106,14 @@ impl Typechecker {
                 Ok(subst)
             }
 
-            (Ty::Instantiated(ty_name1, tys_1), Ty::Instantiated(ty_name2, tys_2))
+            (Ty::Constructed(ty_name1, tys_1), Ty::Constructed(ty_name2, tys_2))
                 if ty_name1 == ty_name2 && tys_1.len() == tys_2.len() =>
             {
                 // Occurs check for all the type parameters of both types
                 for (ty1, ty2) in tys_1.iter().zip(tys_2.iter()) {
                     if let (Ty::Var(var), ty) | (ty, Ty::Var(var)) = (ty1, ty2) {
                         if self.occurs_check(var, ty) {
-                            return Err(TypeError::OccursCheck { location });
+                            return Err(SemanticError::OccursCheck { location });
                         }
                     }
                 }
@@ -158,7 +154,7 @@ impl Typechecker {
                 // If the lengths of the records are different, we can't unify them. So
                 // this should fail since they are not the same type.
                 if rec1.fields.len() != rec2.fields.len() {
-                    return Err(TypeError::TypeMismatch {
+                    return Err(SemanticError::TypeMismatch {
                         expected: Ty::Record(rec1.clone()),
                         found: Ty::Record(rec2.clone()),
                         location,
@@ -172,7 +168,7 @@ impl Typechecker {
 
                     // Check if the field names are the same
                     if name1 != name2 {
-                        return Err(TypeError::TypeMismatch {
+                        return Err(SemanticError::TypeMismatch {
                             expected: Ty::Record(rec1.clone()),
                             found: Ty::Record(rec2.clone()),
                             location,
@@ -187,137 +183,14 @@ impl Typechecker {
                 Ok(subst)
             }
 
-            _ => Err(TypeError::UnificationError(format!(
+            _ => Err(SemanticError::UnificationError(format!(
                 "Cannot unify {t1:?} with {t2:?}"
             ))),
         }
     }
 
-    /// Infer the type of an expression within a substitution environment `env`
-    pub fn infer(&mut self, env: &mut Subst, expr: &Expr, location: SourceLoc) -> Return<Ty> {
-        match expr {
-            Expr::Literal(lit) => self.infer_literal(lit, env, location),
-            Expr::Ident(name) => {
-                let ty = env
-                    .get(name)
-                    .cloned()
-                    .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))?;
-
-                self.apply_subst(env, &ty);
-                Ok(self.instantiate(&ty))
-            }
-
-            Expr::BinOp(lhs, _, rhs) => {
-                let lhs_ty = self.infer(env, &lhs.target, lhs.loc.clone())?;
-                let rhs_ty = self.infer(env, &rhs.target, rhs.loc.clone())?;
-
-                // Unify the types of both sides
-                let subst = self.unify(&lhs_ty, &rhs_ty, location.clone())?;
-                env.extend(subst);
-
-                Ok(lhs_ty)
-            }
-
-            Expr::UnOp(_, expr) => {
-                let ty = self.infer(env, &expr.target, expr.loc.clone())?;
-                Ok(ty)
-            }
-
-            Expr::Record(record) => self.infer_record_ty(record, env, location),
-
-            Expr::Array { elements } => {
-                let mut element_types = Vec::new();
-                for elem in elements {
-                    let ty = self.infer(env, &elem.target, elem.loc.clone())?;
-                    element_types.push(ty);
-                }
-
-                // Unify all the element types with the first type
-                let first_ty = element_types.first().cloned().unwrap_or(Ty::Unit);
-                for ty in &element_types[1..] {
-                    self.unify(&first_ty, ty, location.clone())?;
-                }
-
-                Ok(Ty::Array(Box::new(first_ty)))
-            }
-
-            Expr::ArrayIndex { target, index } => {
-                let target_ty = self.infer(env, &target.target, target.loc.clone())?;
-                let index_ty = self.infer(env, &index.target, index.loc.clone())?;
-
-                self.unify(&index_ty, &Ty::Int, location.clone())?;
-
-                Ok(target_ty)
-            }
-
-            Expr::FnCall { .. } => {
-                // Not enough information to unify right now, we'll come back to it later
-                Ok(Ty::UnknownForNow)
-            }
-
-            Expr::Lam { .. } => self.infer_lam(&expr, env, location.clone()),
-
-            _ => todo!(),
-        }
-    }
-
-    /// Infer the type of a literal expression
-    fn infer_literal(&self, lit: &Literal, _env: &mut Subst, _location: SourceLoc) -> Return<Ty> {
-        match lit {
-            Literal::Int(_) => Ok(Ty::Int),
-            Literal::Float(_) => Ok(Ty::Float),
-            Literal::String(_) => Ok(Ty::String),
-            Literal::Bool(_) => Ok(Ty::Bool),
-        }
-    }
-
-    fn infer_record_ty(
-        &mut self,
-        record: &Record,
-        env: &mut Subst,
-        location: SourceLoc,
-    ) -> Return<Ty> {
-        let ty = record.to_type();
-
-        // Unify the type of the record with the expected type
-        let subst = self.unify(&ty, &record.to_type(), location.clone())?;
-        env.extend(subst);
-
-        Ok(ty)
-    }
-
-    fn infer_lam(&mut self, lam: &Expr, env: &mut Subst, location: SourceLoc) -> Return<Ty> {
-        if let Expr::Lam {
-            args,
-            return_ty,
-            body,
-        } = lam
-        {
-            let mut arg_types = Vec::new();
-            for (name, ty) in args {
-                arg_types.push((name.clone(), ty.clone()));
-            }
-
-            // Unify the return type with the body
-            let body_ty = self.infer(env, &body.target, body.loc.clone())?;
-            let subst = self.unify(&return_ty, &body_ty, location.clone())?;
-            env.extend(subst);
-
-            let func = Function::new_with_expr(
-                "lambda".to_string(),
-                args.clone(),
-                return_ty.clone(),
-                body.clone(),
-            );
-
-            Ok(Ty::Fn(Box::new(func)))
-        } else {
-            Err(TypeError::ExpectedLambda { location: location })
-        }
-    }
-
     fn instantiate(&mut self, ty: &Ty) -> Ty {
-        if let Ty::Instantiated(_, type_params) = ty {
+        if let Ty::Constructed(_, type_params) = ty {
             let mut subst = HashMap::new();
 
             // Replace every parameter with a fresh type variable
@@ -335,7 +208,7 @@ impl Typechecker {
         }
     }
 
-    fn apply_subst(&self, subst: &Subst, ty: &Ty) -> Ty {
+    fn apply_subst(&self, subst: &TypingEnv, ty: &Ty) -> Ty {
         match &*ty {
             // If the type is a type level variable, we check if there is a substitution for it
             Ty::Var(var) => subst.get(var).cloned().unwrap_or(Ty::Var(var.to_string())),
@@ -399,70 +272,266 @@ impl Typechecker {
         }
     }
 
-    pub fn check(&mut self, gamma: &mut Subst, stmt: &Span<Stmt>) -> Result<(), TypeError> {
-        match &stmt.target {
-            Stmt::Expr(expr) => {
-                self.infer(gamma, &expr.target, expr.loc.clone())?;
-                Ok(())
+    /// Infer the type of an expression within a substitution environment `env`
+    pub fn infer(&mut self, env: &mut TypingEnv, expr: &Expr, location: SourceLoc) -> Return<Ty> {
+        match expr {
+            Expr::Literal(lit) => self.infer_literal(lit, env, location),
+            Expr::Ident(name) => {
+                let ty = env
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
+
+                self.apply_subst(env, &ty);
+                Ok(self.instantiate(&ty))
             }
 
-            Stmt::Let { name, ty, value } => {
-                let value_ty = self.infer(gamma, &value.target, value.loc.clone())?;
-                let subst = self.unify(&ty, &value_ty, value.loc.clone())?;
-                gamma.extend(subst);
+            Expr::BinOp(lhs, _, rhs) => {
+                let lhs_ty = self.infer(env, &lhs.target, lhs.loc.clone())?;
+                let rhs_ty = self.infer(env, &rhs.target, rhs.loc.clone())?;
 
-                // Add the variable to the environment
-                gamma.insert(name.clone(), ty.clone());
-                Ok(())
+                // Unify the types of both sides
+                let subst = self.unify(&lhs_ty, &rhs_ty, location.clone())?;
+                env.extend(subst);
+
+                Ok(lhs_ty)
             }
 
-            Stmt::RecordDecl(record) => {
-                let ty = record.to_type();
-                let subst = self.unify(&ty, &record.to_type(), stmt.loc.clone())?;
-                gamma.extend(subst);
-
-                // Add the record to the environment
-                gamma.insert(record.name.clone(), ty.clone());
-                Ok(())
+            Expr::UnOp(_, expr) => {
+                let ty = self.infer(env, &expr.target, expr.loc.clone())?;
+                Ok(ty)
             }
 
-            Stmt::EnumDecl(enum_decl) => {
-                let ty = enum_decl.to_type();
-                let subst = self.unify(&ty, &enum_decl.to_type(), stmt.loc.clone())?;
-                gamma.extend(subst);
+            Expr::Record(record) => self.infer_record_ty(record, env, location),
 
-                // Add the enum to the environment
-                gamma.insert(enum_decl.name.clone(), ty.clone());
-                Ok(())
-            }
-
-            Stmt::FnDecl(func_decl) => {
-                let mut arg_types = Vec::new();
-                for (arg_name, arg_ty) in &func_decl.args {
-                    arg_types.push((arg_name.clone(), arg_ty.clone()));
+            Expr::Array { elements } => {
+                let mut element_types = Vec::new();
+                for elem in elements {
+                    let ty = self.infer(env, &elem.target, elem.loc.clone())?;
+                    element_types.push(ty);
                 }
 
-                // Add the function to the environment
-                // let func_ty = Ty::FnDecl(Box::new(FunctionDecl {
-                //     name: func_decl.name.clone(),
-                //     args: arg_types,
-                //     return_ty: func_decl.return_ty.clone(),
-                //     body: func_decl.body.clone(),
-                // }));
+                // Unify all the element types with the first type
+                let first_ty = element_types.first().cloned().unwrap_or(Ty::Unit);
+                for ty in &element_types[1..] {
+                    self.unify(&first_ty, ty, location.clone())?;
+                }
 
-                // gamma.insert(func_decl.name.clone(), func_decl.return_ty.clone());
-                Ok(())
+                Ok(Ty::Array(Box::new(first_ty)))
             }
+
+            Expr::ArrayIndex { target, index } => {
+                let target_ty = self.infer(env, &target.target, target.loc.clone())?;
+                let index_ty = self.infer(env, &index.target, index.loc.clone())?;
+
+                self.unify(&index_ty, &Ty::Int, location.clone())?;
+
+                Ok(target_ty)
+            }
+
+            Expr::FnCall { .. } => {
+                // Not enough information to unify right now, we'll come back to it later
+                Ok(Ty::UnknownForNow)
+            }
+
+            Expr::Lam { .. } => self.infer_lam(&expr, env, location.clone()),
 
             _ => todo!(),
         }
     }
 
-    pub fn check_ast(&mut self, ast: Vec<Span<Stmt>>) -> Result<(), Vec<TypeError>> {
-        let mut gamma = Subst::new();
+    /// Infer the type of a literal expression
+    fn infer_literal(
+        &self,
+        lit: &Literal,
+        _env: &mut TypingEnv,
+        _location: SourceLoc,
+    ) -> Return<Ty> {
+        match lit {
+            Literal::Int(_) => Ok(Ty::Int),
+            Literal::Float(_) => Ok(Ty::Float),
+            Literal::String(_) => Ok(Ty::String),
+            Literal::Bool(_) => Ok(Ty::Bool),
+        }
+    }
+
+    fn infer_record_ty(
+        &mut self,
+        record: &Record,
+        env: &mut TypingEnv,
+        location: SourceLoc,
+    ) -> Return<Ty> {
+        let ty = record.to_type();
+
+        // Unify the type of the record with the expected type
+        let subst = self.unify(&ty, &record.to_type(), location.clone())?;
+        env.extend(subst);
+
+        Ok(ty)
+    }
+
+    fn infer_lam(&mut self, lam: &Expr, env: &mut TypingEnv, location: SourceLoc) -> Return<Ty> {
+        if let Expr::Lam {
+            args,
+            return_ty,
+            body,
+        } = lam
+        {
+            let mut arg_types = Vec::new();
+            for (name, ty) in args {
+                arg_types.push((name.clone(), ty.clone()));
+            }
+
+            // Unify the return type with the body
+            let body_ty = self.infer(env, &body.target, body.loc.clone())?;
+            let subst = self.unify(&return_ty, &body_ty, location.clone())?;
+            env.extend(subst);
+
+            let func = Function::new_with_expr(
+                "lambda".to_string(),
+                args.clone(),
+                return_ty.clone(),
+                body.clone(),
+            );
+
+            Ok(Ty::Fn(Box::new(func)))
+        } else {
+            Err(SemanticError::ExpectedLambda { location: location })
+        }
+    }
+
+    fn infer_block(
+        &mut self,
+        block: &Vec<Span<Stmt>>,
+        env: &mut TypingEnv,
+        location: SourceLoc,
+    ) -> Return<Ty> {
+        let mut last_seen_ty = Ty::Unit;
+
+        for stmt in block {
+            match &stmt.target {
+                Stmt::Expr(expr) => {
+                    last_seen_ty = self.infer(env, &expr.target, expr.loc.clone())?
+                }
+                _ => self.check(env, stmt, location.clone())?,
+            }
+        }
+
+        Ok(last_seen_ty)
+    }
+
+    pub fn check(
+        &mut self,
+        env: &mut TypingEnv,
+        stmt: &Span<Stmt>,
+        location: SourceLoc,
+    ) -> Result<(), SemanticError> {
+        match &stmt.target {
+            Stmt::Expr(expr) => {
+                self.infer(env, &expr.target, expr.loc.clone())?;
+                Ok(())
+            }
+
+            Stmt::Let { name, ty, value } => {
+                let value_ty = self.infer(env, &value.target, value.loc.clone())?;
+                let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
+                env.extend(local_subst);
+
+                // Add the variable to the environment
+                env.insert(name.clone(), ty.clone());
+                Ok(())
+            }
+
+            Stmt::RecordDecl(record) => {
+                let ty = record.to_type();
+                let local_subst = self.unify(&ty, &record.to_type(), stmt.loc.clone())?;
+                env.extend(local_subst);
+
+                // Add the record to the environment
+                env.insert(record.name.clone(), ty.clone());
+                Ok(())
+            }
+
+            Stmt::EnumDecl(enum_decl) => {
+                let ty = enum_decl.to_type();
+                let local_env = self.unify(&ty, &enum_decl.to_type(), stmt.loc.clone())?;
+                env.extend(local_env);
+
+                // Add the enum to the environment
+                env.insert(enum_decl.name.clone(), ty.clone());
+                Ok(())
+            }
+
+            Stmt::FnDecl(func_decl) => {
+                let mut local_env = env.clone();
+
+                for (arg_name, arg_ty) in &func_decl.args {
+                    // Handle types that are unknown for now but can be inferred later
+                    // We generate a fresh type variable, marking it as polymorphic
+                    let actual_arg_ty = if *arg_ty == Ty::UnknownForNow {
+                        Ty::Var(self.fresh())
+                    } else {
+                        arg_ty.clone()
+                    };
+
+                    local_env.insert(arg_name.clone(), actual_arg_ty);
+                }
+
+                // Infer the body type of the function
+                let body_ty = if let Some(body_expr) = &func_decl.body_expr {
+                    self.infer(&mut local_env, &body_expr.target, body_expr.loc.clone())?
+                } else if let Some(body_stmts) = &func_decl.body {
+                    self.infer_block(&body_stmts, &mut local_env, location.clone())?
+                } else {
+                    // If there is no body, assume Unit
+                    Ty::Unit
+                };
+
+                // Unify with any declared return type, if there is one
+                let return_ty = if func_decl.return_ty != Ty::UnknownForNow {
+                    self.unify(&func_decl.return_ty, &body_ty, location.clone())?;
+                    func_decl.return_ty.clone()
+                } else {
+                    body_ty
+                };
+
+                // Apply our substitutions to the arguments
+                // TODO: Fix so we can infer argument types from the body
+                let args: Vec<(String, Ty)> = func_decl
+                    .args
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.apply_subst(&local_env, ty)))
+                    .collect();
+
+                // Add the function to the environment
+                let func_ty = Ty::Fn(Box::new(Function {
+                    name: func_decl.name.clone(),
+                    args: args,
+                    return_ty: return_ty,
+                    body: if func_decl.body.is_some() {
+                        Some(func_decl.body.clone().unwrap())
+                    } else {
+                        None
+                    },
+                    body_expr: if func_decl.body_expr.is_some() {
+                        Some(func_decl.body_expr.clone().unwrap())
+                    } else {
+                        None
+                    },
+                }));
+
+                env.insert(func_decl.name.clone(), func_ty);
+
+                Ok(())
+            }
+        }
+    }
+
+    pub fn walk_ast(&mut self, ast: Vec<Span<Stmt>>) -> Result<(), Vec<SemanticError>> {
+        let mut subst = TypingEnv::new();
 
         for stmt in ast {
-            self.check(&mut gamma, &stmt)
+            self.check(&mut subst, &stmt, stmt.loc.clone())
                 .map_err(|e| self.errors.push(e))
                 .unwrap_or(());
         }

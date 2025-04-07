@@ -1,7 +1,6 @@
-use type_error::TypeError;
+use azalea_resolver::semantic_error::SemanticError;
 
-pub mod resolver;
-pub mod type_error;
 pub mod typecheck;
+mod typecheck_tests;
 
-pub type Return<'a, T> = Result<T, TypeError>;
+pub type Return<'a, T> = Result<T, SemanticError>;

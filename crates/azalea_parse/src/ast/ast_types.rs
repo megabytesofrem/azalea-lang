@@ -2,7 +2,7 @@ use std::hash::Hash;
 
 use crate::span::Span;
 
-use super::{Block, Stmt, ast::Expr};
+use super::{Expr, Stmt};
 
 #[derive(Debug, Clone)]
 pub enum Ty {
@@ -17,13 +17,13 @@ pub enum Ty {
 
     Var(String),
 
-    /// An instantiated type. Instantiated types *may* or *may not* be generic.
-    /// The following are all instantiated types:
+    /// A constructed type. Constructed types *may* or *may not* be generic.
+    /// The following are all constructed types:
     /// - `string`
     /// - `List[string]`
     /// - `List[A]`: Do note that `A` is a type variable, but for the purposes of simplicity in
-    /// our type system we treat it as an Instantiated type.
-    Instantiated(String, Vec<Ty>),
+    /// our type system we treat it as an constructed type.
+    Constructed(String, Vec<Ty>),
 
     /// Maps directly to JavaScript arrays
     Array(Box<Ty>),
@@ -43,7 +43,7 @@ impl PartialEq for Ty {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Ty::Var(a), Ty::Var(b)) => a == b,
-            (Ty::Instantiated(a, _), Ty::Instantiated(b, _)) => a == b,
+            (Ty::Constructed(a, _), Ty::Constructed(b, _)) => a == b,
             (Ty::Array(a), Ty::Array(b)) => a == b,
             (Ty::Fn(a), Ty::Fn(b)) => a == b,
             (Ty::Record(a), Ty::Record(b)) => a == b,
