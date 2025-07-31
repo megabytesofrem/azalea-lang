@@ -69,12 +69,15 @@ impl<'a> Parser<'a> {
         let name = self.expect(TokenKind::Name)?.literal;
 
         let ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
+            println!("Parsing type annotation in let statement");
             self.next();
             let ty = self.parse_typename()?;
             self.expect(TokenKind::Eq)?;
+            // println!("Finished parsing type annotation, about to parse expression");
 
             ty
         } else {
+            println!("No type annotation found, using UnknownForNow");
             Ty::UnknownForNow
         };
 
@@ -91,11 +94,13 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_record_decl(&mut self) -> parser::Return<Span<Stmt>> {
-        // record name { field: ty, ... }
+        // record name = { field: ty, ... }
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwRecord)?;
         let name = self.expect(TokenKind::Name)?.literal;
+
+        self.expect(TokenKind::Eq)?;
 
         self.expect(TokenKind::LBrace)?;
         let mut record_fields = Vec::new();
@@ -122,11 +127,13 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_enum_decl(&mut self) -> parser::Return<Span<Stmt>> {
-        // enum name { variant1, variant2, ... }
+        // enum name = { variant1, variant2, ... }
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwEnum)?;
         let name = self.expect(TokenKind::Name)?.literal;
+
+        self.expect(TokenKind::Eq)?;
 
         self.expect(TokenKind::LBrace)?;
         let mut enum_variants = Vec::new();

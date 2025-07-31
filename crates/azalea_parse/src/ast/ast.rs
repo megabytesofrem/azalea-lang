@@ -1,4 +1,4 @@
-use super::ast_types::{Enum, Function, Record, Ty};
+use super::ast_types::{Enum, Function, Record, RecordExpr, Ty};
 use crate::{lexer::Op, span::Span};
 
 /// A block of statements delimited by `do` and `end`
@@ -48,7 +48,7 @@ pub enum Expr {
     BinOp(Box<Span<Expr>>, Op, Box<Span<Expr>>),
     UnOp(Op, Box<Span<Expr>>),
 
-    Record(Record),
+    Record(RecordExpr),
 
     Array {
         elements: Vec<Span<Expr>>,

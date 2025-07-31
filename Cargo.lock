@@ -18,10 +18,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "azalea_resolver"
+version = "0.1.0"
+dependencies = [
+ "azalea_parse",
+ "thiserror",
+]
+
+[[package]]
 name = "azalea_typeck"
 version = "0.1.0"
 dependencies = [
  "azalea_parse",
+ "azalea_resolver",
  "thiserror",
 ]
 

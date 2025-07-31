@@ -1,7 +1,12 @@
 use std::collections::HashMap;
 
 use super::syntax_error::SyntaxError;
-use crate::lexer::{LexerIter, Op, SourceLoc, Token, TokenKind};
+use crate::{
+    ast::Stmt,
+    lexer::{self, LexerIter, Op, SourceLoc, Token, TokenKind},
+    parse::base,
+    span::Span,
+};
 
 /// Associativity
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
@@ -17,6 +22,7 @@ pub struct Parser<'a> {
     token_stream: LexerIter<'a>,
     errors: Vec<SyntaxError>,
 
+    pub ast: Vec<Span<Stmt>>,
     pub precedence_table: HashMap<Op, (u8, Assoc)>,
 
     // Keep track of the location internally
@@ -36,6 +42,7 @@ impl<'a> Parser<'a> {
 
         let mut parser = Parser {
             token_stream,
+            ast: Vec::new(),
             errors: Vec::new(),
             line: location.line,
             col: location.start,
@@ -46,6 +53,47 @@ impl<'a> Parser<'a> {
         parser.setup_precedence_table();
 
         parser
+    }
+
+    // Parser driver function
+    pub fn parse(token_stream: lexer::LexerIter<'a>) -> base::Return<'a, Parser<'a>> {
+        let mut parser = Parser::new(token_stream);
+
+        // Parse multiple statements until EOF
+        while parser.peek().is_some() {
+            match parser.parse_stmt() {
+                Ok(stmt) => {
+                    // println!("Parsed statement: {:?}", stmt);
+                    parser.ast.push(stmt);
+                }
+                Err(err) => {
+                    println!("Parse error: {:?}", err);
+                    break;
+                }
+            }
+        }
+
+        Ok(parser)
+    }
+
+    /// Skip tokens until we find a good recovery point for parsing the next statement
+    /// Returns true if a recovery point was found, false if EOF was reached
+    fn skip_to_recovery_point(&mut self) -> bool {
+        // Skip tokens until we find a keyword that likely starts a new statement
+        // or until we reach EOF
+        while let Some(token) = self.peek() {
+            match token.kind {
+                TokenKind::KwLet | TokenKind::KwRecord | TokenKind::KwEnum | TokenKind::KwFn => {
+                    // Found a likely start of a new statement, stop skipping
+                    return true;
+                }
+                _ => {
+                    // Skip this token and continue
+                    self.next();
+                }
+            }
+        }
+        false // Reached EOF without finding a recovery point
     }
 
     pub(crate) fn setup_precedence_table(&mut self) {

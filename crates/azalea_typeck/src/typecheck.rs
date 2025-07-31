@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use azalea_parse::ast::ast_types::{Function, Record, Ty};
+use azalea_parse::ast::ast_types::{Function, Record, RecordExpr, Ty};
 use azalea_parse::ast::{Expr, Literal, Stmt};
 use azalea_parse::lexer::SourceLoc;
 use azalea_parse::span::Span;
@@ -302,7 +302,7 @@ impl Typechecker {
                 Ok(ty)
             }
 
-            Expr::Record(record) => self.infer_record_ty(record, env, location),
+            Expr::Record(record) => self.infer_record_expr_ty(record, env, location),
 
             Expr::Array { elements } => {
                 let mut element_types = Vec::new();
@@ -368,6 +368,33 @@ impl Typechecker {
         env.extend(subst);
 
         Ok(ty)
+    }
+
+    fn infer_record_expr_ty(
+        &mut self,
+        record_expr: &RecordExpr,
+        env: &mut TypingEnv,
+        location: SourceLoc,
+    ) -> Return<Ty> {
+        // For a record expression like Person { name: "Alice", age: 25 },
+        // we need to infer the types of each field expression and construct
+        // a record type from those inferred types
+
+        let mut field_types = Vec::new();
+
+        for (field_name, field_expr) in &record_expr.fields {
+            // Infer the type of the field expression
+            let field_ty = self.infer(env, field_expr, location.clone())?;
+            field_types.push((field_name.clone(), field_ty));
+        }
+
+        // Create a Record type structure for this record expression
+        let record_type = Record {
+            name: record_expr.name.clone(),
+            fields: field_types,
+        };
+
+        Ok(record_type.to_type())
     }
 
     fn infer_lam(&mut self, lam: &Expr, env: &mut TypingEnv, location: SourceLoc) -> Return<Ty> {

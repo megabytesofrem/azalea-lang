@@ -49,6 +49,14 @@ impl<'a> Parser<'a> {
         let token = self.next().ok_or(SyntaxError::UnexpectedEOF)?;
 
         match token.kind {
+            TokenKind::KwType(ref type_name) => match type_name.as_str() {
+                "Int" => Ok(Ty::Int),
+                "Float" => Ok(Ty::Float),
+                "String" => Ok(Ty::String),
+                "Bool" => Ok(Ty::Bool),
+                "Unit" => Ok(Ty::Unit),
+                _ => Err(SyntaxError::ExpectedType(token.location)),
+            },
             TokenKind::Name => match token.literal {
                 "int" => Ok(Ty::Int),
                 "float" => Ok(Ty::Float),

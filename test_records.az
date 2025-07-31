@@ -1,0 +1,17 @@
+enum Gender = {
+  male,
+  female,
+  other
+}
+
+record Person = {
+  name: String,
+  age: Int,
+  gender: Gender
+}
+
+let me: Person = Person{
+  name: "Charlotte",
+  age: 24,
+  gender: Gender.female
+}

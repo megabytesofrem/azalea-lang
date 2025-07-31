@@ -89,6 +89,12 @@ pub struct Function {
     pub body_expr: Option<Box<Span<Expr>>>, // If this is a lambda expression
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordExpr {
+    pub name: String,
+    pub fields: Vec<(String, Expr)>,
+}
+
 impl Record {
     pub fn to_type(&self) -> Ty {
         Ty::Record(Box::new(self.clone()))
