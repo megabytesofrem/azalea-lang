@@ -1,17 +1,15 @@
--- Comment?
-
--- Do we use snake_case or camelCase as a convention?
-
 record App = {
   count: Int
 }
 
+let foo: Int = 123
+
 let app: App = App {count: 0}
 
-fn mk_app(): App = App {count: 0}
+fn mk_app(a: Int): App = .{count: 0}
 
-fn increment(app: App): Unit = app.count += 1
+fn increment(app: App): Unit = app.count + 1
 
-fn decrement(app: App): Unit = app.count -= 1
+fn decrement(app: App): Unit = app.count - 1
 
 fn get_count(app: App): Int = app.count

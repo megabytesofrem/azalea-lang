@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
         let args = self.parse_typed_pair_list()?;
         self.expect(TokenKind::RParen)?;
 
-        let return_ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Arrow) {
+        let return_ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
             self.next();
             self.parse_typename()?
         } else {

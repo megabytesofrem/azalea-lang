@@ -15,6 +15,8 @@ pub enum Ty {
     /// Represents a type that we don't know yet, will be resolved later on
     UnknownForNow,
 
+    /// A type variable is a placeholder for a type that can be replaced with any type.
+    /// For example, in the type `List[A]`, `A` is a type variable.
     Var(String),
 
     /// A constructed type. Constructed types *may* or *may not* be generic.

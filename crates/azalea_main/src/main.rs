@@ -3,8 +3,8 @@
 use azalea_parse::{lexer::lex_tokens, parse::Parser};
 
 fn main() {
-    let src = include_str!("../../../example/types.az");
-    let tokens = lex_tokens(src);
+    let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+    let tokens = lex_tokens(&src);
 
     // Debug: print all tokens
     println!("All tokens:");

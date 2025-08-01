@@ -144,12 +144,13 @@ impl<'a> Parser<'a> {
                     let param = self.parse_typed_pair()?;
                     params.push(param);
 
-                    // Expect a comma if there are more parameters
-                    if self.peek().map(|t| t.kind) != Some(TokenKind::RParen) {
+                    // Check if there are more parameters
+                    if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                        self.next(); // consume the comma
+                    } else {
+                        // No comma means we're done with parameters
                         break;
                     }
-
-                    self.expect(TokenKind::Comma)?;
                 }
             }
         }
