@@ -1,11 +1,14 @@
-use azalea_parse::ast::ast_types::Function;
 #[allow(unused_imports)]
+use azalea_parse::ast::ast_types::Function;
 use azalea_parse::ast::{Expr, Literal, Stmt};
 use azalea_parse::span::Span;
 use azalea_parse::{ast::ast_types::Ty, lexer::SourceLoc, span::spanned};
 
 use crate::typecheck::{Typechecker, TypingEnv};
 
+// Shorthand for creating a new `Typechecker`, since we do it everywhere
+// in these tests.
+#[allow(dead_code)]
 fn tc() -> Typechecker {
     Typechecker::new()
 }
@@ -51,6 +54,7 @@ fn test_primitive_types_are_not_infinite() {
 fn test_can_unify_valid_type_ctor() {
     let mut tc = tc();
 
+    // Unifying List[a] with List[Int] → a = Int
     assert!(
         tc.unify(
             &Ty::Constructed("List".to_string(), vec![Ty::Var("a".to_string())]),
@@ -65,7 +69,7 @@ fn test_can_unify_valid_type_ctor() {
 fn test_cannot_unify_infinite_type_ctor() {
     let mut tc = tc();
 
-    // This is an infinite type
+    // This is an infinite type so unification should fail
     assert!(
         tc.unify(
             &Ty::Constructed("A".to_string(), vec![Ty::Var("a".to_string())]),
@@ -80,6 +84,7 @@ fn test_cannot_unify_infinite_type_ctor() {
 fn test_can_unify_array() {
     let mut tc = tc();
 
+    // Unifying Array[a] with Array[Int] → a = Int
     assert!(
         tc.unify(
             &Ty::Array(Box::new(Ty::Var("a".to_string()))),
@@ -95,6 +100,7 @@ fn test_can_unify_record() {
     use azalea_parse::ast::ast_types::Record;
     let mut tc = tc();
 
+    // Unifying Record[a] with Record[Int] → a = Int
     assert!(
         tc.unify(
             &Ty::Record(Box::new(Record {
@@ -159,6 +165,9 @@ fn test_infer_fn_type_from_body() {
     let args = vec![("y".to_string(), Ty::Int)];
     let declared_func = Function::new_with_stmts("f".to_string(), args, Ty::Unresolved, body_stmts);
 
+    // Debug print the function we are checking
+    println!("Function we are checking: {:?}", declared_func);
+
     let stmt = spanned(Stmt::FnDecl(declared_func), SourceLoc::default());
     assert!(tc.check(&mut env, &stmt, SourceLoc::default()).is_ok());
 
@@ -174,17 +183,50 @@ fn test_infer_fn_type_from_body() {
         }
         _ => panic!("Expected function type, found {:?}", f_ty),
     }
+
+    // Should infer the type of `f` as `fn(y: Int) -> Int`, which it does
+}
+
+#[test]
+fn test_infer_fn_type_lambda() {
+    let mut tc = tc();
+    let mut env = TypingEnv::new();
+
+    // The lambda is `fn f(x: Int) -> Int`
+    let lambda_expr = Expr::Lam {
+        args: vec![("x".to_string(), Ty::Int)],
+        return_ty: Ty::Unresolved,
+        body: Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
+    };
+
+    // Infer the type of `f`
+    // FIXME: Fix lambda scoping and capture arguments
+    tc.check(
+        &mut env,
+        &spanned(
+            Stmt::Expr(spanned(lambda_expr, SourceLoc::default())),
+            SourceLoc::default(),
+        ),
+        SourceLoc::default(),
+    )
+    .expect("Failed to check lambda expression");
+
+    // Check that the inferred type is correct
+    let f_ty = env.get("f").expect("function f not found");
+    println!("f_ty: {:?}", f_ty);
 }
 
 #[test]
 fn test_infer_most_general_types() {
     // Test to see if the typechecker can infer the most general types
-    // fn id(x) = x, x is a type variable and the most general or polymorphic type
+    // `fn id(x) = x`. `x` is a type variable and the most general or polymorphic type
+    //
+    // This is the classic identity function!
 
     let mut tc = tc();
     let mut env = TypingEnv::new();
 
-    // `f` is a function that takes an int and returns an int
+    // `f` is `fn id(x: a) -> a`
     let f = Function::new_with_expr(
         "id".to_string(),
         vec![("x".to_string(), Ty::Var("x".to_string()))],

@@ -2,6 +2,11 @@
 
 Toy language written in Rust that compiles to Javascript.
 
+## Status
+
+Azalea is currently heavily **work in progress** and not yet ready for end-user usage.
+The core features such as its type checker and resolver are working, but still incomplete.
+
 ## Rationale
 
 I wanted a language that I can personally use for a lot of small projects, so targeting Javascript was a necessity.
@@ -11,6 +16,9 @@ Core design decisions:
 - You should almost _never_ need to specify types, despite being static typed
 - Everything is an expression, with few exceptions
 - Records map 1:1 to Javascript objects
+
+To allow type-safe code without the headache of having to manually type everything, Azalea employs a static
+type checker and type inference algorithm based off Hindley Milner and Algorithm W.
 
 ## Syntax
 
@@ -40,7 +48,7 @@ fn adder(g: int, h: int) = g + h
 fn apply_adder(f: fn(int -> int), g: int, h: int) = f(g,h)
 
 -- Lambda functions
-let add_lam = (x, y) => x + y
+let add_lam = (x, y) -> x + y
 apply_adder(adder, 1, 2) -- => 3
 apply_adder(add_lam, 1, 2) -- => 3
 ```
@@ -55,9 +63,9 @@ record Counter = {
 }
 
 enum Colours = {
-    red,
-    green,
-    blue
+  red,
+  green,
+  blue
 }
 
 fn increment(c: Counter) = c.count += 1
