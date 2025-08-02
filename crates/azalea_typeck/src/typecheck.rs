@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use azalea_parse::ast::ast_types::{Function, Record, RecordExpr, Ty};
 use azalea_parse::ast::{Expr, Literal, Stmt};
@@ -55,7 +55,7 @@ impl Typechecker {
             Ty::Var(v) => v == var,
             Ty::Array(inner) => self.occurs_check(var, inner),
 
-            Ty::Constructed(ctor, params) => {
+            Ty::TypeCons(ctor, params) => {
                 // Check if the type variable occurs in the constructor name
                 ctor == var && params.iter().any(|param| self.occurs_check(var, param))
             }
@@ -112,7 +112,7 @@ impl Typechecker {
                 Ok(subst)
             }
 
-            (Ty::Constructed(ty_name1, tys_1), Ty::Constructed(ty_name2, tys_2))
+            (Ty::TypeCons(ty_name1, tys_1), Ty::TypeCons(ty_name2, tys_2))
                 if ty_name1 == ty_name2 && tys_1.len() == tys_2.len() =>
             {
                 // Occurs check for all the type parameters of both types
@@ -195,22 +195,87 @@ impl Typechecker {
         }
     }
 
-    fn instantiate(&mut self, ty: &Ty) -> Ty {
-        if let Ty::Constructed(_, type_params) = ty {
-            let mut subst = HashMap::new();
+    fn find_free_type_vars(&self, ty: &Ty) -> Vec<String> {
+        match ty {
+            Ty::Var(v) => vec![v.clone()],
+            Ty::Array(inner) => self.find_free_type_vars(inner),
+            Ty::Fn(func) => {
+                let mut vars = func
+                    .args
+                    .iter()
+                    .flat_map(|(_, ty)| self.find_free_type_vars(ty))
+                    .collect::<Vec<_>>();
 
-            // Replace every parameter with a fresh type variable
-            // e.g: Option<A, B> becomes Option<t0, t1>
-            //
-            // We leave concrete types alone, since `apply_subst` will map them to themselves intuitively
-            for tv in type_params {
-                let fresh_var = self.fresh();
-                subst.insert(fresh_var.clone(), tv.clone());
+                vars.extend(self.find_free_type_vars(&func.return_ty));
+                vars
+            }
+            Ty::Record(record) => record
+                .fields
+                .iter()
+                .flat_map(|(_, ty)| self.find_free_type_vars(ty))
+                .collect(),
+            Ty::TypeCons(_, type_params) => type_params
+                .iter()
+                .flat_map(|ty| self.find_free_type_vars(ty))
+                .collect(),
+
+            // All other types are concrete and have no free variables
+            _ => vec![],
+        }
+    }
+
+    fn instantiate(&mut self, ty: &Ty) -> Ty {
+        match ty {
+            Ty::ForAll(vars, inner_ty) => {
+                // For universal quantification, we loop through each variable
+                // and substitute it with a fresh type variable.
+                // e.g: `forall A, B. A -> B` becomes `t0 -> t1` where `t0` and `t1` are fresh type variables
+                let mut subst = HashMap::new();
+
+                for var in vars {
+                    subst.insert(var.clone(), Ty::Var(self.fresh()));
+                }
+
+                // Apply the substitution to the inner type
+                return self.apply_subst(&subst, inner_ty);
             }
 
-            self.apply_subst(&subst, ty)
-        } else {
+            Ty::TypeCons(name, ty_params) => {
+                // For type constructors, instantiate each type parameter recursively
+                // e.g: `Option<A, B>` becomes `Option<t0, t1> where `t0` and `t1` are fresh type variables
+                let instantiated_params: Vec<Ty> =
+                    ty_params.iter().map(|ty| self.instantiate(ty)).collect();
+
+                Ty::TypeCons(name.clone(), instantiated_params)
+            }
+
+            // For all other cases, we simply return the type as is
+            _ => ty.clone(),
+        }
+    }
+
+    fn generalize(&mut self, env: &TypingEnv, ty: &Ty) -> Ty {
+        // Collect all free type variables
+        let free_vars = self.find_free_type_vars(ty);
+
+        // Find all free type variables for each type in the environment
+        let env_vars: HashSet<String> = env
+            .values()
+            .flat_map(|ty| self.find_free_type_vars(ty))
+            .collect();
+
+        // Filter out any type variables already bound in the environment
+        // leaving us with the free variables
+        let generalized_vars: Vec<String> = free_vars
+            .into_iter()
+            .filter(|var| !env_vars.contains(var))
+            .collect();
+
+        if generalized_vars.is_empty() {
             ty.clone()
+        } else {
+            // Return a universally quantified type, a forall type
+            Ty::ForAll(generalized_vars, Box::new(ty.clone()))
         }
     }
 
@@ -416,15 +481,29 @@ impl Typechecker {
             body,
         } = lam
         {
+            // Enter a new scope for the lambda
+            self.resolver.push_scope();
+
             let mut arg_types = Vec::new();
             for (name, ty) in args {
+                self.resolver
+                    .define_variable(name.clone(), ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
                 arg_types.push((name.clone(), ty.clone()));
+            }
+
+            for (name, ty) in args {
+                env.insert(name.clone(), ty.clone());
             }
 
             // Unify the return type with the body
             let body_ty = self.infer(env, &body.target, body.loc.clone())?;
             let subst = self.unify(&return_ty, &body_ty, location.clone())?;
+            let return_ty = self.apply_subst(env, return_ty);
             env.extend(subst);
+
+            // Exit the lambda scope
+            self.resolver.pop_scope()?;
 
             let func = Function::new_with_expr(
                 "lambda".to_string(),
@@ -433,7 +512,11 @@ impl Typechecker {
                 body.clone(),
             );
 
-            Ok(Ty::Fn(Box::new(func)))
+            // Generalize the lambda type
+            let func_ty = Ty::Fn(Box::new(func));
+            let general_ty = self.generalize(env, &func_ty);
+
+            Ok(general_ty)
         } else {
             Err(SemanticError::ExpectedLambda { location: location })
         }

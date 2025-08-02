@@ -22,13 +22,14 @@ pub enum Ty {
     /// For example, in the type `List[A]`, `A` is a type variable.
     Var(String),
 
-    /// A constructed type. Constructed types *may* or *may not* be generic.
-    /// The following are all constructed types:
-    /// - `string`
-    /// - `List[string]`
-    /// - `List[A]`: Do note that `A` is a type variable, but for the purposes of simplicity in
-    /// our type system we treat it as an constructed type.
-    Constructed(String, Vec<Ty>),
+    /// A type constructor is a type that is _parameterized_ by other types.
+    /// The following are valid type constructors:
+    /// - `List[A]`
+    /// - `List[Int]`
+    ///
+    /// This is not a type constructor:
+    /// - `String` ❌
+    TypeCons(String, Vec<Ty>),
 
     /// Maps directly to JavaScript arrays
     Array(Box<Ty>),
@@ -39,6 +40,9 @@ pub enum Ty {
     /// Record and enum types
     Record(Box<Record>),
     Enum(Box<Enum>),
+
+    /// A universally quantified polymorphic type, e.g. `forall a. a -> a`
+    ForAll(Vec<String>, Box<Ty>),
 }
 
 // Implement PartialEq, Eq and Hash for `Ty` since it's needed in
@@ -48,7 +52,7 @@ impl PartialEq for Ty {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Ty::Var(a), Ty::Var(b)) => a == b,
-            (Ty::Constructed(a, _), Ty::Constructed(b, _)) => a == b,
+            (Ty::TypeCons(a, _), Ty::TypeCons(b, _)) => a == b,
             (Ty::Array(a), Ty::Array(b)) => a == b,
             (Ty::Fn(a), Ty::Fn(b)) => a == b,
             (Ty::Record(a), Ty::Record(b)) => a == b,

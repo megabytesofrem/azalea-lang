@@ -31,7 +31,7 @@ fn test_type_occurs_in_ctor() {
     assert!(
         tc.occurs_check(
             "a",
-            &Ty::Constructed("a".to_string(), vec![Ty::Var("a".to_string())])
+            &Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())])
         ) == true
     );
 }
@@ -57,8 +57,8 @@ fn test_can_unify_valid_type_ctor() {
     // Unifying List[a] with List[Int] → a = Int
     assert!(
         tc.unify(
-            &Ty::Constructed("List".to_string(), vec![Ty::Var("a".to_string())]),
-            &Ty::Constructed("List".to_string(), vec![Ty::Int]),
+            &Ty::TypeCons("List".to_string(), vec![Ty::Var("a".to_string())]),
+            &Ty::TypeCons("List".to_string(), vec![Ty::Int]),
             SourceLoc::default()
         )
         .is_ok()
@@ -72,8 +72,8 @@ fn test_cannot_unify_infinite_type_ctor() {
     // This is an infinite type so unification should fail
     assert!(
         tc.unify(
-            &Ty::Constructed("A".to_string(), vec![Ty::Var("a".to_string())]),
-            &Ty::Constructed("a".to_string(), vec![Ty::Var("a".to_string())]),
+            &Ty::TypeCons("A".to_string(), vec![Ty::Var("a".to_string())]),
+            &Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())]),
             SourceLoc::default()
         )
         .is_err()
@@ -192,28 +192,17 @@ fn test_infer_fn_type_lambda() {
     let mut tc = tc();
     let mut env = TypingEnv::new();
 
-    // The lambda is `fn f(x: Int) -> Int`
+    // The lambda is `id : a -> a`
     let lambda_expr = Expr::Lam {
-        args: vec![("x".to_string(), Ty::Int)],
-        return_ty: Ty::Unresolved,
-        body: Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
+        args: vec![("a".to_string(), Ty::Var("a".to_string()))],
+        return_ty: Ty::Var("a".to_string()),
+        body: Box::new(spanned(Expr::Ident("a".to_string()), SourceLoc::default())),
     };
 
-    // Infer the type of `f`
-    // FIXME: Fix lambda scoping and capture arguments
-    tc.check(
-        &mut env,
-        &spanned(
-            Stmt::Expr(spanned(lambda_expr, SourceLoc::default())),
-            SourceLoc::default(),
-        ),
-        SourceLoc::default(),
-    )
-    .expect("Failed to check lambda expression");
-
-    // Check that the inferred type is correct
-    let f_ty = env.get("f").expect("function f not found");
-    println!("f_ty: {:?}", f_ty);
+    // Infer the type of the lambda expression
+    let result = tc.infer(&mut env, &lambda_expr, SourceLoc::default());
+    println!("Inferred type of lambda: {:?}", result);
+    assert!(result.is_ok(), "Failed to infer lambda type: {:?}", result);
 }
 
 #[test]

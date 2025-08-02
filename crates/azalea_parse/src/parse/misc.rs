@@ -68,7 +68,7 @@ impl<'a> Parser<'a> {
 
                 // User defined types
                 // TODO: Handle generic instantiation
-                _ => Ok(Ty::Constructed(token.literal.to_string(), Vec::new())),
+                _ => Ok(Ty::TypeCons(token.literal.to_string(), Vec::new())),
             },
 
             _ => Err(SyntaxError::ExpectedType(token.location)),
