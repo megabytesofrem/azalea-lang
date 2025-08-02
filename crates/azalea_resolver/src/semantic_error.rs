@@ -9,6 +9,12 @@ pub enum SemanticError {
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
 
+    #[error("Redefined variable: {0}")]
+    RedefinedVariable(String),
+
+    #[error("Cannot pop from empty scope stack")]
+    EmptyScope,
+
     #[error("{location}: Occurs check (infinite type expansion)")]
     OccursCheck { location: SourceLoc },
 

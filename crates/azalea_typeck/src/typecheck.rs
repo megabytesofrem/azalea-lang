@@ -91,6 +91,12 @@ impl Typechecker {
                 Ok(HashMap::new())
             }
 
+            (Ty::Any, _) | (_, Ty::Any) => {
+                // If one type is `Any`, we can unify it with any other type
+                // This is an _intentional hole_ in the type system
+                Ok(HashMap::new())
+            }
+
             // If one type is a variable, create a substitution binding that
             // variable to the other type. Need to occurs check.
             (Ty::Var(var), ty) | (ty, Ty::Var(var)) => {
@@ -277,6 +283,12 @@ impl Typechecker {
         match expr {
             Expr::Literal(lit) => self.infer_literal(lit, env, location),
             Expr::Ident(name) => {
+                // First check if the variable exists in the resolver (for scope checking)
+                if !self.resolver.is_variable_defined(name) {
+                    return Err(SemanticError::UndefinedVariable(name.clone()));
+                }
+
+                // Then get the type from the typing environment (which tracks current types during inference)
                 let ty = env
                     .get(name)
                     .cloned()
@@ -331,7 +343,7 @@ impl Typechecker {
 
             Expr::FnCall { .. } => {
                 // Not enough information to unify right now, we'll come back to it later
-                Ok(Ty::UnknownForNow)
+                Ok(Ty::Unresolved)
             }
 
             Expr::Lam { .. } => self.infer_lam(&expr, env, location.clone()),
@@ -464,7 +476,9 @@ impl Typechecker {
                 let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
                 env.extend(local_subst);
 
-                // Add the variable to the environment
+                // Add the variable to both the resolver (for scope management) and typing environment (for type tracking)
+                self.resolver
+                    .define_or_redefine_variable(name.clone(), ty.clone());
                 env.insert(name.clone(), ty.clone());
                 Ok(())
             }
@@ -490,16 +504,24 @@ impl Typechecker {
             }
 
             Stmt::FnDecl(func_decl) => {
+                // Create a new scope for the function
+                self.resolver.push_scope();
+
                 let mut local_env = env.clone();
 
                 for (arg_name, arg_ty) in &func_decl.args {
                     // Handle types that are unknown for now but can be inferred later
                     // We generate a fresh type variable, marking it as polymorphic
-                    let actual_arg_ty = if *arg_ty == Ty::UnknownForNow {
+                    let actual_arg_ty = if *arg_ty == Ty::Unresolved {
                         Ty::Var(self.fresh())
                     } else {
                         arg_ty.clone()
                     };
+
+                    // Add function parameters to the resolver
+                    self.resolver
+                        .define_variable(arg_name.clone(), actual_arg_ty.clone())
+                        .map_err(|_| SemanticError::RedefinedVariable(arg_name.clone()))?;
 
                     local_env.insert(arg_name.clone(), actual_arg_ty);
                 }
@@ -515,7 +537,7 @@ impl Typechecker {
                 };
 
                 // Unify with any declared return type, if there is one
-                let return_ty = if func_decl.return_ty != Ty::UnknownForNow {
+                let return_ty = if func_decl.return_ty != Ty::Unresolved {
                     self.unify(&func_decl.return_ty, &body_ty, location.clone())?;
                     func_decl.return_ty.clone()
                 } else {
@@ -547,6 +569,15 @@ impl Typechecker {
                     },
                 }));
 
+                // Pop the function scope
+                self.resolver.pop_scope().map_err(|_| {
+                    SemanticError::UnificationError("Failed to pop function scope".to_string())
+                })?;
+
+                // Add the function to both the resolver and typing environment
+                self.resolver
+                    .define_function(func_decl.name.clone(), func_ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(func_decl.name.clone()))?;
                 env.insert(func_decl.name.clone(), func_ty);
 
                 Ok(())

@@ -12,8 +12,11 @@ pub enum Ty {
     Bool,
     Unit,
 
+    /// A hole in the type system
+    Any,
+
     /// Represents a type that we don't know yet, will be resolved later on
-    UnknownForNow,
+    Unresolved,
 
     /// A type variable is a placeholder for a type that can be replaced with any type.
     /// For example, in the type `List[A]`, `A` is a type variable.

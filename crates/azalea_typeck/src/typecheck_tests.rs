@@ -157,8 +157,7 @@ fn test_infer_fn_type_from_body() {
     ];
 
     let args = vec![("y".to_string(), Ty::Int)];
-    let declared_func =
-        Function::new_with_stmts("f".to_string(), args, Ty::UnknownForNow, body_stmts);
+    let declared_func = Function::new_with_stmts("f".to_string(), args, Ty::Unresolved, body_stmts);
 
     let stmt = spanned(Stmt::FnDecl(declared_func), SourceLoc::default());
     assert!(tc.check(&mut env, &stmt, SourceLoc::default()).is_ok());
@@ -189,7 +188,7 @@ fn test_infer_most_general_types() {
     let f = Function::new_with_expr(
         "id".to_string(),
         vec![("x".to_string(), Ty::Var("x".to_string()))],
-        Ty::UnknownForNow,
+        Ty::Unresolved,
         Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
     );
 

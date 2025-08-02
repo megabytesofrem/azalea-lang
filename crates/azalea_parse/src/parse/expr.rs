@@ -99,17 +99,56 @@ impl<'a> Parser<'a> {
         if let Some(next_token) = self.peek() {
             match next_token.kind {
                 TokenKind::Dot => {
-                    self.next();
-                    let field = self.expect(TokenKind::Name).map(|t| {
-                        Expr::MemberAccess(Member {
-                            target: Box::new(base_expr.clone()),
-                            name: t.literal.to_string(),
-                        })
-                    })?;
+                    // Check if the next token is name (member access) or a left square bracket (array index)
+                    // Member access: base_expr.field
+                    // Array index: base_expr.[index]
 
-                    let location = base_expr.loc.clone();
-                    let expr = spanned(field, location);
-                    self.parse_postfix(expr)
+                    // Consume the dot token
+                    self.next();
+
+                    // Peek at what comes after the dot
+                    if let Some(next_token) = self.peek() {
+                        match next_token.kind {
+                            TokenKind::Name => {
+                                // Member access: base_expr.field
+                                let field_name = next_token.literal.to_string();
+                                self.next(); // consume the field name
+
+                                let field = Expr::MemberAccess(Member {
+                                    target: Box::new(base_expr.clone()),
+                                    name: field_name,
+                                });
+
+                                let location = base_expr.loc.clone();
+                                let expr = spanned(field, location);
+                                return self.parse_postfix(expr);
+                            }
+
+                            TokenKind::LSquare => {
+                                // Array index: base_expr.[index]
+                                self.next(); // consume the '['
+                                let index_expr = self.parse_expr()?;
+                                self.expect(TokenKind::RSquare)?;
+
+                                let array_index = Expr::ArrayIndex {
+                                    target: Box::new(base_expr.clone()),
+                                    index: Box::new(index_expr),
+                                };
+
+                                let location = base_expr.loc.clone();
+                                let expr = spanned(array_index, location);
+                                return self.parse_postfix(expr);
+                            }
+
+                            _ => {
+                                // Invalid syntax after dot
+                                return Err(SyntaxError::ExpectedExpr(next_token.location));
+                            }
+                        }
+                    } else {
+                        // EOF after dot
+                        return Err(SyntaxError::UnexpectedEOF);
+                    }
                 }
 
                 TokenKind::LParen => {
@@ -176,11 +215,22 @@ impl<'a> Parser<'a> {
 
                 TokenKind::LSquare => {
                     // Array index: Parse the array index, and recurse to parse postfix operators
+                    // e.g., array.[0][1] or arr.[0].field
 
                     // TODO: We may have to come back to this when we add generics using `[T]` syntax,
                     // since we need to check if the expression is a function call _or_ an array index
-                    let index = self.parse_array_index()?;
-                    self.parse_postfix(index)
+                    self.next(); // consume the '['
+                    let index_expr = self.parse_expr()?;
+                    self.expect(TokenKind::RSquare)?;
+
+                    let array_index = Expr::ArrayIndex {
+                        target: Box::new(base_expr.clone()),
+                        index: Box::new(index_expr),
+                    };
+
+                    let location = base_expr.loc.clone();
+                    let expr = spanned(array_index, location);
+                    self.parse_postfix(expr)
                 }
 
                 _ => Ok(base_expr),
@@ -212,7 +262,7 @@ impl<'a> Parser<'a> {
             let name = self.expect(TokenKind::Name)?.literal.to_string();
 
             // Types marked as `UnknownForNow` will be inferred later on
-            args.push((name, Ty::UnknownForNow));
+            args.push((name, Ty::Unresolved));
 
             if self.peek().map(|t| t.kind) != Some(TokenKind::Comma) {
                 break;
@@ -228,7 +278,7 @@ impl<'a> Parser<'a> {
         Ok(spanned(
             Expr::Lam {
                 args,
-                return_ty: Ty::UnknownForNow,
+                return_ty: Ty::Unresolved,
                 body: Box::new(body),
             },
             location,

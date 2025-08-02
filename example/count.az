@@ -13,3 +13,10 @@ fn increment(app: App): Unit = app.count + 1
 fn decrement(app: App): Unit = app.count - 1
 
 fn get_count(app: App): Int = app.count
+
+fn main(): Unit = do
+  let app: App = mk_app(0)
+  increment(app)
+  let count: Int = get_count(app)
+  println("Count: " ++ count)
+end

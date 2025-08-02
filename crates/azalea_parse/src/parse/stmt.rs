@@ -78,7 +78,8 @@ impl<'a> Parser<'a> {
             ty
         } else {
             println!("No type annotation found, using UnknownForNow");
-            Ty::UnknownForNow
+            self.next();
+            Ty::Unresolved
         };
 
         let value = self.parse_expr()?;

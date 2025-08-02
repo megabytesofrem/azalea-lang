@@ -1,0 +1,30 @@
+let arr = [1, 2, 3]
+let first: Int = arr.[0]
+let last: Int = arr.[2]
+
+record Counter = {
+  count: Int
+}
+
+fn increment(counter: Counter): Counter = 
+  Counter {count: counter.count + 1}
+
+fn decrement(counter: Counter): Counter =
+  Counter {count: counter.count - 1}
+
+fn new_counter(): Counter =
+  Counter {count: 0}
+
+fn main(): Unit = do
+  mut c = new_counter()
+  for i in 0..10 do
+    c.increment()
+    println("Counter is now " ++ c.count.to_string())
+  end
+
+  let arr2 = [1,2,3,4,5]
+  let sum: Int = arr2.reduce(\(acc, x) -> acc + x, 0)
+  println("Sum of arr2 is " ++ sum.to_string())
+
+  println("First element: " ++ first.to_string())
+end
