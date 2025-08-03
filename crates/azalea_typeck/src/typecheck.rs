@@ -41,7 +41,7 @@ impl Typechecker {
     }
 
     /// Return a fresh type variable.
-    fn fresh(&mut self) -> String {
+    pub fn fresh(&mut self) -> String {
         let var = format!("t{}", self.next_var);
         self.next_var += 1;
         var
@@ -195,156 +195,13 @@ impl Typechecker {
         }
     }
 
-    fn find_free_type_vars(&self, ty: &Ty) -> Vec<String> {
-        match ty {
-            Ty::Var(v) => vec![v.clone()],
-            Ty::Array(inner) => self.find_free_type_vars(inner),
-            Ty::Fn(func) => {
-                let mut vars = func
-                    .args
-                    .iter()
-                    .flat_map(|(_, ty)| self.find_free_type_vars(ty))
-                    .collect::<Vec<_>>();
-
-                vars.extend(self.find_free_type_vars(&func.return_ty));
-                vars
-            }
-            Ty::Record(record) => record
-                .fields
-                .iter()
-                .flat_map(|(_, ty)| self.find_free_type_vars(ty))
-                .collect(),
-            Ty::TypeCons(_, type_params) => type_params
-                .iter()
-                .flat_map(|ty| self.find_free_type_vars(ty))
-                .collect(),
-
-            // All other types are concrete and have no free variables
-            _ => vec![],
-        }
-    }
-
-    fn instantiate(&mut self, ty: &Ty) -> Ty {
-        match ty {
-            Ty::ForAll(vars, inner_ty) => {
-                // For universal quantification, we loop through each variable
-                // and substitute it with a fresh type variable.
-                // e.g: `forall A, B. A -> B` becomes `t0 -> t1` where `t0` and `t1` are fresh type variables
-                let mut subst = HashMap::new();
-
-                for var in vars {
-                    subst.insert(var.clone(), Ty::Var(self.fresh()));
-                }
-
-                // Apply the substitution to the inner type
-                return self.apply_subst(&subst, inner_ty);
-            }
-
-            Ty::TypeCons(name, ty_params) => {
-                // For type constructors, instantiate each type parameter recursively
-                // e.g: `Option<A, B>` becomes `Option<t0, t1> where `t0` and `t1` are fresh type variables
-                let instantiated_params: Vec<Ty> =
-                    ty_params.iter().map(|ty| self.instantiate(ty)).collect();
-
-                Ty::TypeCons(name.clone(), instantiated_params)
-            }
-
-            // For all other cases, we simply return the type as is
-            _ => ty.clone(),
-        }
-    }
-
-    fn generalize(&mut self, env: &TypingEnv, ty: &Ty) -> Ty {
-        // Collect all free type variables
-        let free_vars = self.find_free_type_vars(ty);
-
-        // Find all free type variables for each type in the environment
-        let env_vars: HashSet<String> = env
-            .values()
-            .flat_map(|ty| self.find_free_type_vars(ty))
-            .collect();
-
-        // Filter out any type variables already bound in the environment
-        // leaving us with the free variables
-        let generalized_vars: Vec<String> = free_vars
-            .into_iter()
-            .filter(|var| !env_vars.contains(var))
-            .collect();
-
-        if generalized_vars.is_empty() {
-            ty.clone()
-        } else {
-            // Return a universally quantified type, a forall type
-            Ty::ForAll(generalized_vars, Box::new(ty.clone()))
-        }
-    }
-
-    fn apply_subst(&self, subst: &TypingEnv, ty: &Ty) -> Ty {
-        match &*ty {
-            // If the type is a type level variable, we check if there is a substitution for it
-            Ty::Var(var) => subst.get(var).cloned().unwrap_or(Ty::Var(var.to_string())),
-
-            // If the type is an array of any type, apply the substitution to the inner type
-            Ty::Array(inner) => Ty::Array(Box::new(self.apply_subst(subst, &inner))),
-
-            Ty::Fn(func) => {
-                let args: Vec<(String, Ty)> = func
-                    .args
-                    .iter()
-                    .map(|(name, ty)| (name.clone(), self.apply_subst(subst, &ty)))
-                    .collect();
-
-                let return_ty = self.apply_subst(subst, &func.return_ty);
-
-                // Check if the function is a lambda expression or has a body consisting of statements
-                let is_lambda = func.body_expr.is_some() && func.body.is_none();
-
-                if is_lambda {
-                    let func_type = Function::new_with_expr(
-                        func.name.clone(),
-                        args.clone(),
-                        return_ty.clone(),
-                        func.body_expr.clone().unwrap(),
-                    );
-
-                    return Ty::Fn(Box::new(func_type));
-                } else {
-                    let func_type = Function::new_with_stmts(
-                        func.name.clone(),
-                        args.clone(),
-                        return_ty.clone(),
-                        func.body.clone().unwrap_or_default(),
-                    );
-
-                    return Ty::Fn(Box::new(func_type));
-                }
-            }
-
-            // If the type is a record, apply the substitution to the fields
-            Ty::Record(record) => {
-                let fields = record
-                    .fields
-                    .iter()
-                    .map(|(name, ty)| (name.clone(), self.apply_subst(subst, &ty)))
-                    .collect();
-
-                Ty::Record(Box::new(Record {
-                    name: record.name.clone(),
-                    fields,
-                }))
-            }
-
-            // See above: Enums currently cannot have user-defined types, so we can
-            // logically conclude that they can never be infinite types.
-            Ty::Enum(_) => ty.clone(),
-
-            // All other types are concrete - leave them alone
-            _ => ty.clone(),
-        }
-    }
-
     /// Infer the type of an expression within a substitution environment `env`
-    pub fn infer(&mut self, env: &mut TypingEnv, expr: &Expr, location: SourceLoc) -> Return<Ty> {
+    pub fn infer_type(
+        &mut self,
+        env: &mut TypingEnv,
+        expr: &Expr,
+        location: SourceLoc,
+    ) -> Return<Ty> {
         match expr {
             Expr::Literal(lit) => self.infer_literal(lit, env, location),
             Expr::Ident(name) => {
@@ -359,13 +216,13 @@ impl Typechecker {
                     .cloned()
                     .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
 
-                self.apply_subst(env, &ty);
+                self.hydrate_type(env, &ty);
                 Ok(self.instantiate(&ty))
             }
 
             Expr::BinOp(lhs, _, rhs) => {
-                let lhs_ty = self.infer(env, &lhs.target, lhs.loc.clone())?;
-                let rhs_ty = self.infer(env, &rhs.target, rhs.loc.clone())?;
+                let lhs_ty = self.infer_type(env, &lhs.target, lhs.loc.clone())?;
+                let rhs_ty = self.infer_type(env, &rhs.target, rhs.loc.clone())?;
 
                 // Unify the types of both sides
                 let subst = self.unify(&lhs_ty, &rhs_ty, location.clone())?;
@@ -375,16 +232,16 @@ impl Typechecker {
             }
 
             Expr::UnOp(_, expr) => {
-                let ty = self.infer(env, &expr.target, expr.loc.clone())?;
+                let ty = self.infer_type(env, &expr.target, expr.loc.clone())?;
                 Ok(ty)
             }
 
-            Expr::Record(record) => self.infer_record_expr_ty(record, env, location),
+            Expr::Record(record) => self.infer_record_expr(record, env, location),
 
             Expr::Array { elements } => {
                 let mut element_types = Vec::new();
                 for elem in elements {
-                    let ty = self.infer(env, &elem.target, elem.loc.clone())?;
+                    let ty = self.infer_type(env, &elem.target, elem.loc.clone())?;
                     element_types.push(ty);
                 }
 
@@ -398,8 +255,8 @@ impl Typechecker {
             }
 
             Expr::ArrayIndex { target, index } => {
-                let target_ty = self.infer(env, &target.target, target.loc.clone())?;
-                let index_ty = self.infer(env, &index.target, index.loc.clone())?;
+                let target_ty = self.infer_type(env, &target.target, target.loc.clone())?;
+                let index_ty = self.infer_type(env, &index.target, index.loc.clone())?;
 
                 self.unify(&index_ty, &Ty::Int, location.clone())?;
 
@@ -432,22 +289,7 @@ impl Typechecker {
         }
     }
 
-    fn infer_record_ty(
-        &mut self,
-        record: &Record,
-        env: &mut TypingEnv,
-        location: SourceLoc,
-    ) -> Return<Ty> {
-        let ty = record.to_type();
-
-        // Unify the type of the record with the expected type
-        let subst = self.unify(&ty, &record.to_type(), location.clone())?;
-        env.extend(subst);
-
-        Ok(ty)
-    }
-
-    fn infer_record_expr_ty(
+    fn infer_record_expr(
         &mut self,
         record_expr: &RecordExpr,
         env: &mut TypingEnv,
@@ -461,11 +303,10 @@ impl Typechecker {
 
         for (field_name, field_expr) in &record_expr.fields {
             // Infer the type of the field expression
-            let field_ty = self.infer(env, field_expr, location.clone())?;
+            let field_ty = self.infer_type(env, field_expr, location.clone())?;
             field_types.push((field_name.clone(), field_ty));
         }
 
-        // Create a Record type structure for this record expression
         let record_type = Record {
             name: record_expr.name.clone(),
             fields: field_types,
@@ -497,9 +338,9 @@ impl Typechecker {
             }
 
             // Unify the return type with the body
-            let body_ty = self.infer(env, &body.target, body.loc.clone())?;
+            let body_ty = self.infer_type(env, &body.target, body.loc.clone())?;
             let subst = self.unify(&return_ty, &body_ty, location.clone())?;
-            let return_ty = self.apply_subst(env, return_ty);
+            let return_ty = self.hydrate_type(env, return_ty);
             env.extend(subst);
 
             // Exit the lambda scope
@@ -533,7 +374,7 @@ impl Typechecker {
         for stmt in block {
             match &stmt.target {
                 Stmt::Expr(expr) => {
-                    last_seen_ty = self.infer(env, &expr.target, expr.loc.clone())?
+                    last_seen_ty = self.infer_type(env, &expr.target, expr.loc.clone())?
                 }
                 _ => self.check(env, stmt, location.clone())?,
             }
@@ -550,12 +391,12 @@ impl Typechecker {
     ) -> Result<(), SemanticError> {
         match &stmt.target {
             Stmt::Expr(expr) => {
-                self.infer(env, &expr.target, expr.loc.clone())?;
+                self.infer_type(env, &expr.target, expr.loc.clone())?;
                 Ok(())
             }
 
             Stmt::Let { name, ty, value } => {
-                let value_ty = self.infer(env, &value.target, value.loc.clone())?;
+                let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
                 let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
                 env.extend(local_subst);
 
@@ -611,11 +452,10 @@ impl Typechecker {
 
                 // Infer the body type of the function
                 let body_ty = if let Some(body_expr) = &func_decl.body_expr {
-                    self.infer(&mut local_env, &body_expr.target, body_expr.loc.clone())?
+                    self.infer_type(&mut local_env, &body_expr.target, body_expr.loc.clone())?
                 } else if let Some(body_stmts) = &func_decl.body {
                     self.infer_block(&body_stmts, &mut local_env, location.clone())?
                 } else {
-                    // If there is no body, assume Unit
                     Ty::Unit
                 };
 
@@ -627,12 +467,12 @@ impl Typechecker {
                     body_ty
                 };
 
-                // Apply our substitutions to the arguments
-                // TODO: Fix so we can infer argument types from the body
+                // Apply our substitutions to the arguments using `hydrate_type`
+                // FIXME: Fix so we can infer argument types from the body
                 let args: Vec<(String, Ty)> = func_decl
                     .args
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.apply_subst(&local_env, ty)))
+                    .map(|(name, ty)| (name.clone(), self.hydrate_type(&local_env, ty)))
                     .collect();
 
                 // Add the function to the environment

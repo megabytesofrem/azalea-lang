@@ -20,3 +20,5 @@ fn main(): Unit = do
   let count: Int = get_count(app)
   println("Count: " ++ count)
 end
+
+

@@ -200,7 +200,7 @@ fn test_infer_fn_type_lambda() {
     };
 
     // Infer the type of the lambda expression
-    let result = tc.infer(&mut env, &lambda_expr, SourceLoc::default());
+    let result = tc.infer_type(&mut env, &lambda_expr, SourceLoc::default());
     println!("Inferred type of lambda: {:?}", result);
     assert!(result.is_ok(), "Failed to infer lambda type: {:?}", result);
 }
