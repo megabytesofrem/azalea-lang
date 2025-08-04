@@ -285,6 +285,38 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn parse_if(&mut self) -> parser::Return<Span<Expr>> {
+        // if condition then [block] else [block] end
+        let location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        self.expect(TokenKind::KwIf)?;
+
+        let cond = self.parse_expr()?;
+        self.expect(TokenKind::KwThen)?;
+
+        let then_block = self.parse_starting_block()?;
+
+        let else_block = if self.peek().map(|t| t.kind) == Some(TokenKind::KwElse) {
+            self.next(); // consume the else token
+            Some(self.parse_starting_block()?)
+        } else {
+            None
+        };
+
+        self.expect(TokenKind::KwEnd)?;
+
+        Ok(spanned(
+            Expr::If {
+                cond: Box::new(cond),
+                then: then_block,
+
+                // Optional else block
+                else_: else_block,
+            },
+            location,
+        ))
+    }
+
     fn parse_fncall(&mut self) -> parser::Return<Span<Expr>> {
         // f(x, y)
         let location = self.peek().map(|t| t.location).unwrap_or_default();

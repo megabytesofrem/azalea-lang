@@ -1,0 +1,19 @@
+---
+source: crates/azalea-core/src/resolver/resolver_tests.rs
+expression: "format!(\"Result: {:#?}\\nResolver: {:#?}\", result, resolver)"
+---
+Result: Err(
+    RedefinedVariable(
+        "x",
+    ),
+)
+Resolver: Resolver {
+    scopes: [
+        Scope {
+            variables: {
+                "x": Int,
+            },
+            functions: {},
+        },
+    ],
+}

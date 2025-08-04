@@ -1,0 +1,31 @@
+---
+source: crates/azalea-core/src/parse/parser_tests.rs
+expression: "format!(\"{:#?}\", bin_expr)"
+---
+BinOp(
+    Span {
+        target: Literal(
+            Int(
+                1,
+            ),
+        ),
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+    Add,
+    Span {
+        target: Literal(
+            Int(
+                2,
+            ),
+        ),
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+)

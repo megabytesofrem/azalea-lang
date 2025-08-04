@@ -1,0 +1,40 @@
+---
+source: crates/azalea-core/src/typeck/typecheck_tests.rs
+expression: "format!(\"Result: {:#?}\\nEnv: {:#?}\", result, env)"
+---
+Result: Ok(
+    Fn(
+        Function {
+            name: "lambda",
+            args: [
+                (
+                    "a",
+                    Var(
+                        "a",
+                    ),
+                ),
+            ],
+            return_ty: Var(
+                "a",
+            ),
+            body: None,
+            body_expr: Some(
+                Span {
+                    target: Ident(
+                        "a",
+                    ),
+                    loc: SourceLoc {
+                        line: 1,
+                        start: 0,
+                        end: 0,
+                    },
+                },
+            ),
+        },
+    ),
+)
+Env: {
+    "a": Var(
+        "a",
+    ),
+}

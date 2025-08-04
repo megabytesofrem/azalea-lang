@@ -5,6 +5,7 @@ use crate::parse::span::Span;
 use crate::{lexer::SourceLoc, parse::span::spanned};
 
 use crate::typeck::typecheck::{Typechecker, TypingEnv};
+use insta::assert_snapshot;
 
 // Shorthand for creating a new `Typechecker`, since we do it everywhere
 // in these tests.
@@ -14,132 +15,125 @@ fn tc() -> Typechecker {
 }
 
 #[test]
-fn test_type_occurs_in_var() {
+fn does_type_occur_in_var() {
     let tc = tc();
 
     // `a` is bound in the type constructor `a`, _and_ the type constructor _is_ `a`
     // so this is an infinite type
-    assert!(tc.occurs_check("a", &Ty::Var("a".to_string())) == true);
+    let result = tc.occurs_check("a", &Ty::Var("a".to_string()));
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_type_occurs_in_ctor() {
+fn does_type_occur_in_ctor() {
     let tc = tc();
 
     // `a` is bound in the type constructor `a`, _and_ the type constructor _is_ `a`
     // so this is an infinite type
-    assert!(
-        tc.occurs_check(
-            "a",
-            &Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())])
-        ) == true
+    let result = tc.occurs_check(
+        "a",
+        &Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())]),
     );
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_primitive_types_are_not_infinite() {
+fn primitive_types_are_not_infinite() {
     let tc = tc();
 
     // Primitive types can never be infinite
-    assert!(tc.occurs_check("a", &Ty::Int) == false);
-    assert!(tc.occurs_check("a", &Ty::Float) == false);
-    assert!(tc.occurs_check("a", &Ty::String) == false);
-    assert!(tc.occurs_check("a", &Ty::Bool) == false);
-    assert!(tc.occurs_check("a", &Ty::Unit) == false);
+    let results = vec![
+        tc.occurs_check("a", &Ty::Int),
+        tc.occurs_check("a", &Ty::Float),
+        tc.occurs_check("a", &Ty::String),
+        tc.occurs_check("a", &Ty::Bool),
+        tc.occurs_check("a", &Ty::Unit),
+    ];
+    assert_snapshot!(format!("Results: {:#?}", results));
 }
 
 // Unification tests
 
 #[test]
-fn test_can_unify_valid_type_ctor() {
+fn can_unify_valid_type_ctor() {
     let mut tc = tc();
 
     // Unifying List[a] with List[Int] → a = Int
-    assert!(
-        tc.unify(
-            &Ty::TypeCons("List".to_string(), vec![Ty::Var("a".to_string())]),
-            &Ty::TypeCons("List".to_string(), vec![Ty::Int]),
-            SourceLoc::default()
-        )
-        .is_ok()
+    let result = tc.unify(
+        &Ty::TypeCons("List".to_string(), vec![Ty::Var("a".to_string())]),
+        &Ty::TypeCons("List".to_string(), vec![Ty::Int]),
+        SourceLoc::default(),
     );
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_cannot_unify_infinite_type_ctor() {
+fn cannot_unify_infinite_type_ctor() {
     let mut tc = tc();
 
     // This is an infinite type so unification should fail
-    assert!(
-        tc.unify(
-            &Ty::TypeCons("A".to_string(), vec![Ty::Var("a".to_string())]),
-            &Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())]),
-            SourceLoc::default()
-        )
-        .is_err()
+    let result = tc.unify(
+        &Ty::TypeCons("A".to_string(), vec![Ty::Var("a".to_string())]),
+        &Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())]),
+        SourceLoc::default(),
     );
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_can_unify_array() {
+fn can_unify_arrays() {
     let mut tc = tc();
 
     // Unifying Array[a] with Array[Int] → a = Int
-    assert!(
-        tc.unify(
-            &Ty::Array(Box::new(Ty::Var("a".to_string()))),
-            &Ty::Array(Box::new(Ty::Int)),
-            SourceLoc::default()
-        )
-        .is_ok()
+    let result = tc.unify(
+        &Ty::Array(Box::new(Ty::Var("a".to_string()))),
+        &Ty::Array(Box::new(Ty::Int)),
+        SourceLoc::default(),
     );
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_can_unify_record() {
+fn can_unify_records() {
     use crate::ast::ast_types::Record;
     let mut tc = tc();
 
     // Unifying Record[a] with Record[Int] → a = Int
-    assert!(
-        tc.unify(
-            &Ty::Record(Box::new(Record {
-                name: "a".to_string(),
-                fields: vec![],
-            })),
-            &Ty::Record(Box::new(Record {
-                name: "b".to_string(),
-                fields: vec![],
-            })),
-            SourceLoc::default()
-        )
-        .is_ok()
+    let result = tc.unify(
+        &Ty::Record(Box::new(Record {
+            name: "a".to_string(),
+            fields: vec![],
+        })),
+        &Ty::Record(Box::new(Record {
+            name: "b".to_string(),
+            fields: vec![],
+        })),
+        SourceLoc::default(),
     );
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_cannot_unify_record_with_different_fields() {
+fn cannot_unify_records_with_different_fields() {
     use crate::ast::ast_types::Record;
     let mut tc = tc();
 
-    assert!(
-        tc.unify(
-            &Ty::Record(Box::new(Record {
-                name: "Person".to_string(),
-                fields: vec![("age".to_string(), Ty::Int)],
-            })),
-            &Ty::Record(Box::new(Record {
-                name: "Person".to_string(),
-                fields: vec![("name".to_string(), Ty::String)],
-            })),
-            SourceLoc::default()
-        )
-        .is_err()
+    let result = tc.unify(
+        &Ty::Record(Box::new(Record {
+            name: "Person".to_string(),
+            fields: vec![("age".to_string(), Ty::Int)],
+        })),
+        &Ty::Record(Box::new(Record {
+            name: "Person".to_string(),
+            fields: vec![("name".to_string(), Ty::String)],
+        })),
+        SourceLoc::default(),
     );
+    assert_snapshot!(format!("Result: {:#?}", result));
 }
 
 #[test]
-fn test_infer_fn_type_from_body() {
+fn infer_fn_type_from_body() {
     let mut tc = tc();
     let mut env = TypingEnv::new();
 
@@ -165,30 +159,13 @@ fn test_infer_fn_type_from_body() {
     let args = vec![("y".to_string(), Ty::Int)];
     let declared_func = Function::new_with_stmts("f".to_string(), args, Ty::Unresolved, body_stmts);
 
-    // Debug print the function we are checking
-    println!("Function we are checking: {:?}", declared_func);
-
     let stmt = spanned(Stmt::FnDecl(declared_func), SourceLoc::default());
-    assert!(tc.check(&mut env, &stmt, SourceLoc::default()).is_ok());
-
-    // Check that the inferred type is correct
-    let f_ty = env.get("f").expect("function f not found");
-    match f_ty {
-        Ty::Fn(func) => {
-            assert_eq!(func.args.len(), 1);
-            assert_eq!(func.args[0].1, Ty::Int);
-            assert_eq!(func.return_ty, Ty::Int);
-
-            println!("Function type: {:?}", func);
-        }
-        _ => panic!("Expected function type, found {:?}", f_ty),
-    }
-
-    // Should infer the type of `f` as `fn(y: Int) -> Int`, which it does
+    let result = tc.check(&mut env, &stmt, SourceLoc::default());
+    assert_snapshot!(format!("Result: {:#?}\nEnv: {:#?}", result, env));
 }
 
 #[test]
-fn test_infer_fn_type_lambda() {
+fn infer_fn_type_lambda() {
     let mut tc = tc();
     let mut env = TypingEnv::new();
 
@@ -199,23 +176,15 @@ fn test_infer_fn_type_lambda() {
         body: Box::new(spanned(Expr::Ident("a".to_string()), SourceLoc::default())),
     };
 
-    // Infer the type of the lambda expression
     let result = tc.infer_type(&mut env, &lambda_expr, SourceLoc::default());
-    println!("Inferred type of lambda: {:?}", result);
-    assert!(result.is_ok(), "Failed to infer lambda type: {:?}", result);
+    assert_snapshot!(format!("Result: {:#?}\nEnv: {:#?}", result, env));
 }
 
 #[test]
-fn test_infer_most_general_types() {
-    // Test to see if the typechecker can infer the most general types
-    // `fn id(x) = x`. `x` is a type variable and the most general or polymorphic type
-    //
-    // This is the classic identity function!
-
+fn infer_most_general_types() {
     let mut tc = tc();
     let mut env = TypingEnv::new();
 
-    // `f` is `fn id(x: a) -> a`
     let f = Function::new_with_expr(
         "id".to_string(),
         vec![("x".to_string(), Ty::Var("x".to_string()))],
@@ -225,15 +194,10 @@ fn test_infer_most_general_types() {
 
     let fn_decl = Stmt::FnDecl(f.clone());
 
-    // Infer the type of `f`
-    tc.check(
+    let result = tc.check(
         &mut env,
         &spanned(fn_decl, SourceLoc::default()),
         SourceLoc::default(),
-    )
-    .expect("Failed to check function declaration");
-
-    // Check that the inferred type is correct
-    let f_ty = env.get("id").expect("function id not found");
-    println!("f_ty: {:?}", f_ty);
+    );
+    assert_snapshot!(format!("Result: {:#?}\nEnv: {:#?}", result, env));
 }

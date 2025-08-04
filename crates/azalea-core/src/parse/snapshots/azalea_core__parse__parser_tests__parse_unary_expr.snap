@@ -1,0 +1,19 @@
+---
+source: crates/azalea-core/src/parse/parser_tests.rs
+expression: "format!(\"{:#?}\", unary_expr)"
+---
+UnOp(
+    Neg,
+    Span {
+        target: Literal(
+            Int(
+                3,
+            ),
+        ),
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+)

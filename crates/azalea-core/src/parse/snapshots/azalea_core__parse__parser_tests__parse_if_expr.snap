@@ -1,0 +1,66 @@
+---
+source: crates/azalea-core/src/parse/parser_tests.rs
+expression: "format!(\"{:#?}\", if_expr)"
+---
+If {
+    cond: Span {
+        target: Literal(
+            Bool(
+                true,
+            ),
+        ),
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+    then: [
+        Span {
+            target: Expr(
+                Span {
+                    target: Literal(
+                        Int(
+                            1,
+                        ),
+                    ),
+                    loc: SourceLoc {
+                        line: 1,
+                        start: 0,
+                        end: 0,
+                    },
+                },
+            ),
+            loc: SourceLoc {
+                line: 1,
+                start: 0,
+                end: 0,
+            },
+        },
+    ],
+    else_: Some(
+        [
+            Span {
+                target: Expr(
+                    Span {
+                        target: Literal(
+                            Int(
+                                0,
+                            ),
+                        ),
+                        loc: SourceLoc {
+                            line: 1,
+                            start: 0,
+                            end: 0,
+                        },
+                    },
+                ),
+                loc: SourceLoc {
+                    line: 1,
+                    start: 0,
+                    end: 0,
+                },
+            },
+        ],
+    ),
+}

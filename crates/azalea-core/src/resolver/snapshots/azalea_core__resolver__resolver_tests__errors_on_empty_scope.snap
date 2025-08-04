@@ -1,0 +1,15 @@
+---
+source: crates/azalea-core/src/resolver/resolver_tests.rs
+expression: "format!(\"Result: {:#?}\\nResolver: {:#?}\", result, resolver)"
+---
+Result: Err(
+    EmptyScope,
+)
+Resolver: Resolver {
+    scopes: [
+        Scope {
+            variables: {},
+            functions: {},
+        },
+    ],
+}

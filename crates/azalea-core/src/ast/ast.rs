@@ -74,7 +74,7 @@ pub enum Expr {
 
     If {
         cond: Box<Span<Expr>>,
-        then: Box<Span<Expr>>,
-        else_: Option<Box<Span<Expr>>>,
+        then: Vec<Span<Stmt>>,
+        else_: Option<Vec<Span<Stmt>>>,
     },
 }

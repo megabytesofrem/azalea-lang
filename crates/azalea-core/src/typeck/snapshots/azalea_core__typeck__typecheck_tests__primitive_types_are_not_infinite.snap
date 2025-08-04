@@ -1,0 +1,11 @@
+---
+source: crates/azalea-core/src/typeck/typecheck_tests.rs
+expression: "format!(\"Results: {:#?}\", results)"
+---
+Results: [
+    false,
+    false,
+    false,
+    false,
+    false,
+]

@@ -1,0 +1,5 @@
+---
+source: crates/azalea-core/src/resolver/resolver_tests.rs
+expression: "format!(\"Lookup: {:#?}\", resolver.lookup_variable(\"undefined\"))"
+---
+Lookup: None

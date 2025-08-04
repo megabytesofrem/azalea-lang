@@ -1,0 +1,35 @@
+---
+source: crates/azalea-core/src/typeck/typecheck_tests.rs
+expression: "format!(\"Result: {:#?}\", result)"
+---
+Result: Err(
+    TypeMismatch {
+        expected: Record(
+            Record {
+                name: "Person",
+                fields: [
+                    (
+                        "age",
+                        Int,
+                    ),
+                ],
+            },
+        ),
+        found: Record(
+            Record {
+                name: "Person",
+                fields: [
+                    (
+                        "name",
+                        String,
+                    ),
+                ],
+            },
+        ),
+        location: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+)

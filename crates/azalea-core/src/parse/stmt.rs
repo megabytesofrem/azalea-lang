@@ -60,6 +60,22 @@ impl<'a> Parser<'a> {
         Ok(stmts_in_block)
     }
 
+    pub(crate) fn parse_starting_block(&mut self) -> parser::Return<Block> {
+        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        self.expect_one_of(vec![TokenKind::KwDo, TokenKind::KwThen, TokenKind::KwElse])?;
+
+        let mut stmts_in_block = Vec::new();
+
+        while self.peek().map(|t| t.kind) != Some(TokenKind::KwEnd) {
+            let stmt = self.parse_stmt()?;
+            stmts_in_block.push(stmt);
+        }
+
+        self.expect(TokenKind::KwEnd)?;
+
+        Ok(stmts_in_block)
+    }
+
     fn parse_let(&mut self) -> parser::Return<Span<Stmt>> {
         // let name: ty = expr or let name = expr
         let location = self.peek().map(|t| t.location).unwrap_or_default();
