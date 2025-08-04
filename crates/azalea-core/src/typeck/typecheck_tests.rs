@@ -1,10 +1,10 @@
 #[allow(unused_imports)]
-use azalea_parse::ast::ast_types::Function;
-use azalea_parse::ast::{Expr, Literal, Stmt};
-use azalea_parse::span::Span;
-use azalea_parse::{ast::ast_types::Ty, lexer::SourceLoc, span::spanned};
+use crate::ast::ast_types::{Function, Ty};
+use crate::ast::{Expr, Literal, Stmt};
+use crate::parse::span::Span;
+use crate::{lexer::SourceLoc, parse::span::spanned};
 
-use crate::typecheck::{Typechecker, TypingEnv};
+use crate::typeck::typecheck::{Typechecker, TypingEnv};
 
 // Shorthand for creating a new `Typechecker`, since we do it everywhere
 // in these tests.
@@ -97,7 +97,7 @@ fn test_can_unify_array() {
 
 #[test]
 fn test_can_unify_record() {
-    use azalea_parse::ast::ast_types::Record;
+    use crate::ast::ast_types::Record;
     let mut tc = tc();
 
     // Unifying Record[a] with Record[Int] → a = Int
@@ -119,7 +119,7 @@ fn test_can_unify_record() {
 
 #[test]
 fn test_cannot_unify_record_with_different_fields() {
-    use azalea_parse::ast::ast_types::Record;
+    use crate::ast::ast_types::Record;
     let mut tc = tc();
 
     assert!(

@@ -1,6 +1,6 @@
 /// The Azalea compiler
 /// Copyright (c) 2024 Rem
-use azalea_parse::{lexer::lex_tokens, parse::Parser};
+use azalea_core::{lexer::lex_tokens, parse::Parser};
 
 fn main() {
     let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();

@@ -1,4 +1,4 @@
-use super::lexer::SourceLoc;
+use crate::lexer::SourceLoc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span<T> {

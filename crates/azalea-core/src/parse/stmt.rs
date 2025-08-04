@@ -2,15 +2,14 @@ use super::Parser;
 use super::base as parser;
 use super::syntax_error::SyntaxError;
 use crate::ast::Block;
-use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::ast_types::Enum;
 use crate::ast::ast_types::Function;
 use crate::ast::ast_types::Record;
 use crate::ast::ast_types::Ty;
 use crate::lexer::TokenKind;
-use crate::span::Span;
-use crate::span::spanned;
+use crate::parse::span::Span;
+use crate::parse::span::spanned;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_stmt(&mut self) -> parser::Return<Span<Stmt>> {

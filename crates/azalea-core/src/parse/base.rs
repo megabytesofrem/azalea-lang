@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
 use super::syntax_error::SyntaxError;
-use crate::{
-    ast::Stmt,
-    lexer::{self, LexerIter, Op, SourceLoc, Token, TokenKind},
-    parse::base,
-    span::Span,
-};
+use crate::ast::Stmt;
+use crate::lexer::{self, LexerIter, Op, SourceLoc, Token, TokenKind};
+use crate::parse::{base, span::Span};
 
 /// Associativity
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]

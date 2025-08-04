@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use azalea_parse::ast::ast_types::{Function, Record, Ty};
+use crate::ast::ast_types::{Function, Record, Ty};
 
-use crate::typecheck::{Typechecker, TypingEnv};
+use crate::typeck::typecheck::{Typechecker, TypingEnv};
 
 impl Typechecker {
     /// Find all free type variables in a type.

@@ -3,14 +3,7 @@
 version = 4
 
 [[package]]
-name = "azalea_main"
-version = "0.1.0"
-dependencies = [
- "azalea_parse",
-]
-
-[[package]]
-name = "azalea_parse"
+name = "azalea-core"
 version = "0.1.0"
 dependencies = [
  "logos",
@@ -18,20 +11,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "azalea_resolver"
+name = "azalea_main"
 version = "0.1.0"
 dependencies = [
- "azalea_parse",
- "thiserror",
-]
-
-[[package]]
-name = "azalea_typeck"
-version = "0.1.0"
-dependencies = [
- "azalea_parse",
- "azalea_resolver",
- "thiserror",
+ "azalea-core",
 ]
 
 [[package]]

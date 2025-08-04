@@ -1,15 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use azalea_parse::ast::ast_types::{Function, Record, RecordExpr, Ty};
-use azalea_parse::ast::{Expr, Literal, Stmt};
-use azalea_parse::lexer::SourceLoc;
-use azalea_parse::span::Span;
+use crate::ast::ast_types::{Function, Record, RecordExpr, Ty};
+use crate::ast::{Expr, Literal, Stmt};
+use crate::lexer::SourceLoc;
+use crate::parse::span::Span;
 
 // Name and scope resolution
-use azalea_resolver::resolver::Resolver;
-use azalea_resolver::semantic_error::SemanticError;
+use crate::resolver::resolver::Resolver;
+use crate::resolver::semantic_error::SemanticError;
 
-use crate::Return;
+use crate::resolver::Return;
 
 /// A typing environment is a mapping from type variables to types.
 pub type TypingEnv = HashMap<String, Ty>;

@@ -1,4 +1,4 @@
-use azalea_parse::{ast::ast_types::Ty, lexer::SourceLoc};
+use crate::{ast::ast_types::Ty, lexer::SourceLoc};
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]

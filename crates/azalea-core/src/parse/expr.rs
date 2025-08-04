@@ -5,7 +5,7 @@ use super::{Assoc, Parser};
 use crate::ast::ast_types::{RecordExpr, Ty};
 use crate::lexer::{Token, TokenKind};
 use crate::parse::base as parser;
-use crate::span::{Span, spanned};
+use crate::parse::span::{Span, spanned};
 
 use crate::ast::{Expr, Literal, Member};
 

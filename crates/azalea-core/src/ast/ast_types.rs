@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::span::Span;
+use crate::parse::span::Span;
 
 use super::{Expr, Stmt};
 

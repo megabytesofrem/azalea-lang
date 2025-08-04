@@ -1,7 +1,7 @@
 use std::{collections::HashMap, vec};
 
-use crate::{Return, semantic_error::SemanticError};
-use azalea_parse::ast::ast_types::Ty;
+use crate::ast::ast_types::Ty;
+use crate::{resolver::Return, resolver::semantic_error::SemanticError};
 
 #[derive(Debug, Clone)]
 pub struct Scope {

@@ -1,6 +1,6 @@
-use crate::resolver::Resolver;
-use crate::semantic_error::SemanticError;
-use azalea_parse::ast::ast_types::Ty;
+use crate::ast::ast_types::Ty;
+use crate::resolver::resolver::Resolver;
+use crate::resolver::semantic_error::SemanticError;
 
 #[test]
 fn test_basic_variable_definition() {
@@ -123,7 +123,7 @@ fn test_function_definition_and_lookup() {
     let mut resolver = Resolver::new();
 
     // Define a function in global scope
-    let func_ty = Ty::Fn(Box::new(azalea_parse::ast::ast_types::Function {
+    let func_ty = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "test_func".to_string(),
         args: vec![("x".to_string(), Ty::Int)],
         return_ty: Ty::String,
@@ -144,7 +144,7 @@ fn test_function_definition_and_lookup() {
 fn test_function_redefinition_error() {
     let mut resolver = Resolver::new();
 
-    let func_ty1 = Ty::Fn(Box::new(azalea_parse::ast::ast_types::Function {
+    let func_ty1 = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "test_func".to_string(),
         args: vec![("x".to_string(), Ty::Int)],
         return_ty: Ty::String,
@@ -152,7 +152,7 @@ fn test_function_redefinition_error() {
         body_expr: None,
     }));
 
-    let func_ty2 = Ty::Fn(Box::new(azalea_parse::ast::ast_types::Function {
+    let func_ty2 = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "test_func".to_string(),
         args: vec![("y".to_string(), Ty::String)],
         return_ty: Ty::Int,
@@ -179,7 +179,7 @@ fn test_function_redefinition_error() {
 fn test_function_scoping() {
     let mut resolver = Resolver::new();
 
-    let func_ty = Ty::Fn(Box::new(azalea_parse::ast::ast_types::Function {
+    let func_ty = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "global_func".to_string(),
         args: vec![],
         return_ty: Ty::Unit,
@@ -199,7 +199,7 @@ fn test_function_scoping() {
     assert_eq!(resolver.lookup_function("global_func"), Some(&func_ty));
 
     // Define local function
-    let local_func_ty = Ty::Fn(Box::new(azalea_parse::ast::ast_types::Function {
+    let local_func_ty = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "local_func".to_string(),
         args: vec![],
         return_ty: Ty::Int,

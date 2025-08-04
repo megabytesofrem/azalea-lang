@@ -1,5 +1,5 @@
 use super::ast_types::{Enum, Function, Record, RecordExpr, Ty};
-use crate::{lexer::Op, span::Span};
+use crate::{lexer::Op, parse::span::Span};
 
 /// A block of statements delimited by `do` and `end`
 pub type Block = Vec<Span<Stmt>>;
