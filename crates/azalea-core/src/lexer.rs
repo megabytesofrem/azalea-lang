@@ -43,6 +43,8 @@ pub enum TokenKind {
     DoubleEq,
     #[token("!=")]
     NotEq,
+    #[token("!")]
+    Bang,
     #[token("<")]
     Less,
     #[token("<=")]
@@ -75,6 +77,8 @@ pub enum TokenKind {
     KwImport,
     #[token("if")]
     KwIf,
+    #[token("then")]
+    KwThen,
     #[token("else")]
     KwElse,
     #[token("for")]

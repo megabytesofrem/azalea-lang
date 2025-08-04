@@ -7,7 +7,8 @@ use crate::lexer::{Token, TokenKind};
 use crate::parse::base as parser;
 use crate::parse::span::{Span, spanned};
 
-use crate::ast::{Expr, Literal, Member};
+use crate::ast::{Expr, Literal, Member, Stmt};
+use crate::lexer::Op;
 
 impl<'a> Parser<'a> {
     // parse_expr_prec and parse_expr are helper functions for parsing expressions with precedence, while
@@ -48,6 +49,16 @@ impl<'a> Parser<'a> {
 
     fn parse_main_expr(&mut self) -> parser::Return<Span<Expr>> {
         let location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        // Check for unary operators first
+        if let Some(token) = self.peek() {
+            if token.kind == TokenKind::Bang {
+                self.next(); // consume the operator
+                let expr = self.parse_main_expr()?;
+                return Ok(spanned(Expr::UnOp(Op::Not, Box::new(expr)), location));
+            }
+        }
+
         let token = self
             .peek()
             .ok_or(SyntaxError::ExpectedExpr(location.clone()))?;
@@ -70,7 +81,8 @@ impl<'a> Parser<'a> {
             TokenKind::LParen => {
                 // Subexpressions
                 let expr = self.parse_expr()?;
-                self.expect(TokenKind::RParen)?;
+                self.expect(TokenKind::RParen)
+                    .map_err(|_| SyntaxError::MissingClosingParen(location))?;
 
                 Ok(expr)
             }
@@ -88,6 +100,16 @@ impl<'a> Parser<'a> {
                 let ident = spanned(Expr::Ident(token.literal.to_string()), location.clone());
                 self.next();
                 self.parse_postfix(ident)
+            }
+
+            TokenKind::KwIf => {
+                println!("Parsing if expression");
+                self.parse_if()
+            }
+
+            TokenKind::Lambda => {
+                println!("Parsing lambda expression");
+                self.parse_lambda()
             }
 
             _ => Err(SyntaxError::ExpectedExpr(location)),
@@ -128,7 +150,9 @@ impl<'a> Parser<'a> {
                                 // Array index: base_expr.[index]
                                 self.next(); // consume the '['
                                 let index_expr = self.parse_expr()?;
-                                self.expect(TokenKind::RSquare)?;
+                                self.expect(TokenKind::RSquare).map_err(|_| {
+                                    SyntaxError::MissingClosingSquareBracket(base_expr.loc.clone())
+                                })?;
 
                                 let array_index = Expr::ArrayIndex {
                                     target: Box::new(base_expr.clone()),
@@ -142,12 +166,14 @@ impl<'a> Parser<'a> {
 
                             _ => {
                                 // Invalid syntax after dot
-                                return Err(SyntaxError::ExpectedExpr(next_token.location));
+                                let location = base_expr.loc.clone();
+                                return Err(SyntaxError::InvalidTokenAfterDot(location));
                             }
                         }
                     } else {
                         // EOF after dot
-                        return Err(SyntaxError::UnexpectedEOF);
+                        let location = base_expr.loc.clone();
+                        return Err(SyntaxError::InvalidTokenAfterDot(location));
                     }
                 }
 
@@ -181,7 +207,7 @@ impl<'a> Parser<'a> {
                                     name
                                 }
                                 Some(Token { location, .. }) => {
-                                    return Err(SyntaxError::ExpectedExpr(location));
+                                    return Err(SyntaxError::InvalidRecordFormat(location));
                                 }
                                 None => return Err(SyntaxError::UnexpectedEOF),
                             };
@@ -294,11 +320,18 @@ impl<'a> Parser<'a> {
         let cond = self.parse_expr()?;
         self.expect(TokenKind::KwThen)?;
 
-        let then_block = self.parse_starting_block()?;
+        // For a simple if-then-end, we expect a single expression
+        let then_expr = self.parse_expr()?;
+        let then_loc = location.clone();
+        let then_block = vec![spanned(Stmt::Expr(then_expr), then_loc)];
 
         let else_block = if self.peek().map(|t| t.kind) == Some(TokenKind::KwElse) {
             self.next(); // consume the else token
-            Some(self.parse_starting_block()?)
+
+            // For a simple else block, we expect a single expression
+            let else_expr = self.parse_expr()?;
+            let else_loc = self.peek().map(|t| t.location).unwrap_or_default();
+            Some(vec![spanned(Stmt::Expr(else_expr), else_loc)])
         } else {
             None
         };

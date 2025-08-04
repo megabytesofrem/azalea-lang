@@ -1,0 +1,10 @@
+---
+source: crates/azalea-core/src/parse/parser_tests.rs
+expression: output
+---
+SOURCE:
+#1abcdef
+
+ERROR:
+  2 | #1abcdef
+Error: Expected an expression

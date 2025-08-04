@@ -3,18 +3,18 @@ source: crates/azalea-core/src/parse/parser_tests.rs
 expression: output
 ---
 SOURCE:
-42
+"Hello, world!"
 
 EXPRESSION:
 Span {
     target: Literal(
-        Int(
-            42,
+        String(
+            "\"Hello, world!\"",
         ),
     ),
     loc: SourceLoc {
         line: 1,
         start: 0,
-        end: 2,
+        end: 15,
     },
 }

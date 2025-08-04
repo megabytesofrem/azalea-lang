@@ -1,0 +1,10 @@
+---
+source: crates/azalea-core/src/parse/parser_tests.rs
+expression: output
+---
+SOURCE:
+$florbble
+
+ERROR:
+  2 | $florbble
+Error: Expected an expression

@@ -3,18 +3,18 @@ source: crates/azalea-core/src/parse/parser_tests.rs
 expression: output
 ---
 SOURCE:
-42
+3.14
 
 EXPRESSION:
 Span {
     target: Literal(
-        Int(
-            42,
+        Float(
+            3.14,
         ),
     ),
     loc: SourceLoc {
         line: 1,
         start: 0,
-        end: 2,
+        end: 4,
     },
 }

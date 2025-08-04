@@ -1,23 +1,15 @@
 ---
 source: crates/azalea-core/src/parse/parser_tests.rs
-expression: "format!(\"{:#?}\", if_expr)"
+expression: output
 ---
-If {
-    cond: Span {
-        target: Literal(
-            Bool(
-                true,
-            ),
-        ),
-        loc: SourceLoc {
-            line: 1,
-            start: 0,
-            end: 0,
-        },
-    },
-    then: [
-        Span {
-            target: Expr(
+SOURCE:
+if 1 == 1 then 42 end
+
+EXPRESSION:
+Span {
+    target: If {
+        cond: Span {
+            target: BinOp(
                 Span {
                     target: Literal(
                         Int(
@@ -26,41 +18,58 @@ If {
                     ),
                     loc: SourceLoc {
                         line: 1,
-                        start: 0,
-                        end: 0,
+                        start: 3,
+                        end: 4,
+                    },
+                },
+                DoubleEq,
+                Span {
+                    target: Literal(
+                        Int(
+                            1,
+                        ),
+                    ),
+                    loc: SourceLoc {
+                        line: 1,
+                        start: 8,
+                        end: 9,
                     },
                 },
             ),
             loc: SourceLoc {
                 line: 1,
-                start: 0,
-                end: 0,
+                start: 3,
+                end: 4,
             },
         },
-    ],
-    else_: Some(
-        [
+        then: [
             Span {
                 target: Expr(
                     Span {
                         target: Literal(
                             Int(
-                                0,
+                                42,
                             ),
                         ),
                         loc: SourceLoc {
                             line: 1,
-                            start: 0,
-                            end: 0,
+                            start: 15,
+                            end: 17,
                         },
                     },
                 ),
                 loc: SourceLoc {
                     line: 1,
                     start: 0,
-                    end: 0,
+                    end: 2,
                 },
             },
         ],
-    ),
+        else_: None,
+    },
+    loc: SourceLoc {
+        line: 1,
+        start: 0,
+        end: 2,
+    },
 }

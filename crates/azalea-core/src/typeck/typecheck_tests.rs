@@ -5,7 +5,7 @@ use crate::parse::span::Span;
 use crate::{lexer::SourceLoc, parse::span::spanned};
 
 use crate::typeck::typecheck::{Typechecker, TypingEnv};
-use insta::assert_snapshot;
+use insta::{assert_snapshot, assert_yaml_snapshot};
 
 // Shorthand for creating a new `Typechecker`, since we do it everywhere
 // in these tests.
