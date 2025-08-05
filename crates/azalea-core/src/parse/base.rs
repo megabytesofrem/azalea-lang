@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use super::syntax_error::SyntaxError;
+use super::error::ParserError;
 use crate::ast::Stmt;
-use crate::lexer::{self, LexerIter, Op, SourceLoc, Token, TokenKind};
+use crate::lexer::{self, LexerIter, LexicalError, Op, SourceLoc, Token, TokenKind};
 use crate::parse::{base, span::Span};
 
 /// Associativity
@@ -17,7 +17,7 @@ pub enum Assoc {
 pub struct Parser<'a> {
     // lifetime 'a is used throughout the entire parser
     token_stream: LexerIter<'a>,
-    errors: Vec<SyntaxError>,
+    errors: Vec<ParserError>,
 
     pub ast: Vec<Span<Stmt>>,
     pub precedence_table: HashMap<Op, (u8, Assoc)>,
@@ -27,7 +27,7 @@ pub struct Parser<'a> {
     col: usize,
 }
 
-pub type Return<'a, T> = Result<T, SyntaxError>;
+pub type Return<'a, T> = Result<T, ParserError>;
 
 impl<'a> Parser<'a> {
     pub fn new(token_stream: LexerIter<'a>) -> Self {
@@ -35,7 +35,11 @@ impl<'a> Parser<'a> {
         let location = token_stream
             .clone()
             .peek()
-            .map_or(SourceLoc::default(), |t| t.clone().location);
+            .and_then(|lex_result| match lex_result {
+                Ok(token) => Some(token.location.clone()),
+                Err(lex_error) => Some(lex_error.location().clone()),
+            })
+            .unwrap_or_default();
 
         let mut parser = Parser {
             token_stream,
@@ -114,26 +118,42 @@ impl<'a> Parser<'a> {
             .unwrap_or((0, Assoc::Left))
     }
 
-    pub fn errors(&self) -> &Vec<SyntaxError> {
+    pub fn errors(&self) -> &Vec<ParserError> {
         &self.errors
     }
 
     /// Peek ahead by one token in the stream
     pub(crate) fn peek(&mut self) -> Option<Token<'a>> {
-        self.token_stream.peek().cloned()
+        match self.token_stream.peek() {
+            Some(Ok(token)) => Some(token.clone()),
+            Some(Err(lex_error)) => {
+                // Convert lexical error to syntax error and store it
+                self.errors
+                    .push(ParserError::LexicalError(lex_error.clone()));
+                None
+            }
+            None => None,
+        }
     }
 
     /// Consume the next token in the stream and return it
     pub(crate) fn next(&mut self) -> Option<Token<'a>> {
         self.col += 1;
-        let token = self.token_stream.next();
-        token
+        match self.token_stream.next() {
+            Some(Ok(token)) => Some(token),
+            Some(Err(lex_error)) => {
+                // Convert lexical error to syntax error and store it
+                self.errors.push(ParserError::LexicalError(lex_error));
+                None
+            }
+            None => None,
+        }
     }
 
     /// `check` has the same fundamental behavior as `expect`, but it doesn't advance
     /// the parser or consume the token.
     pub(crate) fn check(&mut self, kind: TokenKind) -> Return<Token<'a>> {
-        let token = self.peek().ok_or(SyntaxError::UnexpectedEOF)?;
+        let token = self.peek().ok_or(ParserError::UnexpectedEOF)?;
         if token.kind == kind {
             Ok(token)
         } else if token.kind == TokenKind::Comment {
@@ -141,7 +161,7 @@ impl<'a> Parser<'a> {
             self.next();
             self.check(kind)
         } else {
-            let error = SyntaxError::UnexpectedToken {
+            let error = ParserError::UnexpectedToken {
                 token: token.kind,
                 expected_any: vec![kind],
                 location: token.location,
@@ -155,14 +175,14 @@ impl<'a> Parser<'a> {
     /// Expect a token, consume it and return it if it matches the expected kind.
     /// If it doesn't match, return a `SyntaxError`.
     pub(crate) fn expect(&mut self, kind: TokenKind) -> Return<Token<'a>> {
-        let token = self.next().ok_or(SyntaxError::UnexpectedEOF)?;
+        let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
         if token.kind == kind {
             Ok(token)
         } else if token.kind == TokenKind::Comment {
             // If the token is a comment, skip it and try again
             self.expect(kind)
         } else {
-            let error = SyntaxError::UnexpectedToken {
+            let error = ParserError::UnexpectedToken {
                 token: token.kind,
                 expected_any: vec![kind],
                 location: token.location,
@@ -173,7 +193,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn expect_error(&mut self, kind: TokenKind, err: SyntaxError) -> Return<Token<'a>> {
+    pub(crate) fn expect_error(&mut self, kind: TokenKind, err: ParserError) -> Return<Token<'a>> {
         self.expect(kind).map_err(|_| err)
     }
 
@@ -181,14 +201,14 @@ impl<'a> Parser<'a> {
     /// token kinds.
     /// If the next token is not one of the expected kinds, return a `SyntaxError`.
     pub(crate) fn expect_one_of(&mut self, kinds: Vec<TokenKind>) -> Return<Token<'a>> {
-        let token = self.next().ok_or(SyntaxError::UnexpectedEOF)?;
+        let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
         if kinds.contains(&token.kind) {
             Ok(token)
         } else if token.kind == TokenKind::Comment {
             // If the token is a comment, skip it and try again
             self.expect_one_of(kinds)
         } else {
-            let error = SyntaxError::UnexpectedToken {
+            let error = ParserError::UnexpectedToken {
                 token: token.kind,
                 expected_any: kinds,
                 location: token.location,

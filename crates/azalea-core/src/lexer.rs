@@ -1,4 +1,5 @@
-use std::{fmt, iter::Peekable};
+use std::fmt;
+use std::iter::Peekable;
 
 use logos::{Logos, SpannedIter};
 
@@ -9,7 +10,139 @@ pub struct SourceLoc {
     pub end: usize,
 }
 
+/// Lexical errors that can occur during tokenization
+#[derive(Default, Debug, Clone, PartialEq)]
+pub enum LexicalError {
+    UnterminatedString {
+        source: String,
+        location: SourceLoc,
+    },
+    InvalidHexDigit {
+        source: String,
+        location: SourceLoc,
+        found: char,
+    },
+    InvalidIntegerFormat {
+        source: String,
+        location: SourceLoc,
+        literal: String,
+    },
+    InvalidFloatFormat {
+        source: String,
+        location: SourceLoc,
+        literal: String,
+    },
+    BadEscapeSequence {
+        source: String,
+        location: SourceLoc,
+        sequence: String,
+    },
+
+    #[default]
+    Unknown,
+}
+
+impl LexicalError {
+    pub fn location(&self) -> SourceLoc {
+        match self {
+            LexicalError::UnterminatedString { location, .. }
+            | LexicalError::InvalidHexDigit { location, .. }
+            | LexicalError::InvalidIntegerFormat { location, .. }
+            | LexicalError::InvalidFloatFormat { location, .. }
+            | LexicalError::BadEscapeSequence { location, .. } => location.clone(),
+            LexicalError::Unknown => SourceLoc::default(),
+        }
+    }
+}
+
+fn valid_string_literal(lex: &mut logos::Lexer<TokenKind>) -> Result<(), LexicalError> {
+    let slice = lex.slice();
+
+    if !slice.starts_with('"') || !slice.ends_with('"') {
+        return Err(LexicalError::UnterminatedString {
+            source: slice.to_owned(),
+            location: SourceLoc {
+                line: 0, // TODO: Calculate the correct line number somehow
+                start: lex.span().start,
+                end: lex.span().end,
+            },
+        });
+    }
+
+    // Check for valid escape sequences
+    let substring = &slice[1..slice.len() - 1];
+    let mut chars = substring.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                // Valid escape sequences
+                Some('n') | Some('t') | Some('r') | Some('\\') | Some('"') => continue,
+
+                Some(invalid) => {
+                    return Err(LexicalError::BadEscapeSequence {
+                        source: slice.to_owned(),
+                        location: SourceLoc {
+                            line: 0, // TODO: Calculate the correct line number somehow
+                            start: lex.span().start,
+                            end: lex.span().end,
+                        },
+                        sequence: format!("\\{}", invalid),
+                    });
+                }
+                None => {
+                    return Err(LexicalError::BadEscapeSequence {
+                        source: slice.to_owned(),
+                        location: SourceLoc {
+                            line: 0, // TODO: Calculate the correct line number somehow
+                            start: lex.span().start,
+                            end: lex.span().end,
+                        },
+                        sequence: String::from("\\"),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn valid_hex_literal(lex: &mut logos::Lexer<TokenKind>) -> Result<(), LexicalError> {
+    let slice = lex.slice();
+    let hex_digits = &slice[2..]; // Skip the "0x" prefix
+
+    if hex_digits.is_empty() {
+        return Err(LexicalError::InvalidIntegerFormat {
+            source: slice.to_owned(),
+            location: SourceLoc {
+                line: 0, // TODO: Calculate the correct line number somehow
+                start: lex.span().start,
+                end: lex.span().end,
+            },
+            literal: slice.to_owned(),
+        });
+    }
+
+    for c in hex_digits.chars() {
+        if !c.is_ascii_hexdigit() {
+            return Err(LexicalError::InvalidHexDigit {
+                source: slice.to_owned(),
+                location: SourceLoc {
+                    line: 0, // TODO: Calculate the correct line number somehow
+                    start: lex.span().start,
+                    end: lex.span().end,
+                },
+                found: c,
+            });
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Logos)]
+#[logos(error = LexicalError)]
 pub enum TokenKind {
     #[token("+")]
     Plus,
@@ -106,9 +239,9 @@ pub enum TokenKind {
     IntLit,
     #[regex(r"[-]?[0-9]+\.[0-9]+")]
     FloatLit,
-    #[regex(r"0[xX][0-9a-fA-F]+")]
+    #[regex(r"0[xX][0-9a-fA-F]+", |lex| valid_hex_literal(lex))]
     HexIntLit,
-    #[regex(r#""(\\[\\"]|[^"])*""#)]
+    #[regex(r#""(\\[\\"]|[^"])*""#, |lex| valid_string_literal(lex))]
     StringLit,
 
     #[regex(r"--.*\n?")]
@@ -123,6 +256,19 @@ pub enum TokenKind {
     #[regex(r"[\r\n]+", logos::skip)]
     NewLine,
 }
+
+#[derive(Debug, Clone)]
+pub struct Token<'a> {
+    pub kind: TokenKind,
+    pub location: SourceLoc,
+    pub literal: &'a str,
+}
+
+// Wrapper type for a peekable iterator over lexing results
+pub type LexerIter<'a> = Peekable<Box<TokenIter<'a>>>;
+
+/// Result type for lexing operations - either a valid token or a lexical error
+pub type LexResult<'a> = Result<Token<'a>, LexicalError>;
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Op {
@@ -140,16 +286,6 @@ pub enum Op {
     Neg,
     Not,
 }
-
-#[derive(Debug, Clone)]
-pub struct Token<'a> {
-    pub kind: TokenKind,
-    pub location: SourceLoc,
-    pub literal: &'a str,
-}
-
-// Wrapper type for a peekable iterator over tokens
-pub type LexerIter<'a> = Peekable<Box<TokenIter<'a>>>;
 
 #[derive(Clone)]
 pub struct TokenIter<'a> {
@@ -224,19 +360,22 @@ impl<'a> TokenIter<'a> {
 }
 
 impl<'a> Iterator for TokenIter<'a> {
-    type Item = Token<'a>;
+    type Item = LexResult<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(kind, span)| {
-                Some(Token {
-                    kind: kind.ok()?,
-                    location: self.get_location(),
+        self.inner.next().map(|(kind, span)| {
+            let location = self.get_location();
+            match kind {
+                Ok(kind) => Ok(Token {
+                    kind,
+                    location,
                     literal: &self.src[span],
-                })
-            })
-            .flatten()
+                }),
+
+                // We handle lexical errors in the lexer itself
+                Err(lex_error) => Err(lex_error),
+            }
+        })
     }
 }
 

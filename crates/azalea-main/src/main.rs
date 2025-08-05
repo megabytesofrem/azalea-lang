@@ -8,11 +8,18 @@ fn main() {
 
     // Debug: print all tokens
     println!("All tokens:");
-    for (i, token) in tokens.clone().enumerate() {
-        println!(
-            "{}: {:?} at {:?} = '{}'",
-            i, token.kind, token.location, token.literal
-        );
+    for (i, lex_result) in tokens.clone().enumerate() {
+        match lex_result {
+            Ok(token) => {
+                println!(
+                    "{}: {:?} at {:?} = '{}'",
+                    i, token.kind, token.location, token.literal
+                );
+            }
+            Err(lex_error) => {
+                println!("{}: Lexical Error: {:?}", i, lex_error);
+            }
+        }
     }
     println!("\nParsing...\n");
 

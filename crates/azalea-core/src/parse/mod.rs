@@ -1,9 +1,9 @@
 pub mod base;
+pub mod error;
 pub mod expr;
 pub mod misc;
 pub mod span;
 pub mod stmt;
-pub mod syntax_error;
 
 #[cfg(test)]
 pub mod parser_tests;

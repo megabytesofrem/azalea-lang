@@ -29,19 +29,36 @@ impl ErrorReport {
         let mut report = String::new();
         let lines: Vec<&str> = self.source.lines().collect();
 
-        // println!("DEBUG: SOURCE: {}", self.source);
-        // println!("DEBUG: LINES: {:?}", lines);
+        let error_line = self.loc.line.saturating_sub(1);
+        let line_count = lines.len();
 
-        // FIXME: Calculate the range of lines to show
-        let start_line = self.loc.line;
+        report.push_str(&format!("Error: {}\n", self.message));
 
-        for (i, line) in lines.iter().enumerate() {
-            let line_number = start_line + i + 1; // +1 for 1-based index
-            report.push_str(&format!("{:>3} | {}\n", line_number, line));
-            if line_number == self.loc.line {
-                // Highlight the error location
-                let marker = " ".repeat(self.loc.start - 1) + "^";
-                report.push_str(&format!("    | {}\n", marker));
+        // Calculate the range of lines to show around the error
+        let start_line = error_line.saturating_sub(3);
+
+        let end_line = (error_line + 3).min(line_count - 1);
+
+        for line_idx in start_line..=end_line {
+            if line_idx < line_count {
+                let line_num = line_idx + 1; // Convert to 1-based index
+                let is_error_line = line_idx == error_line;
+
+                let line_prefix = if is_error_line {
+                    format!("{:>3} > | ", line_num)
+                } else {
+                    format!("{:>3} | ", line_num)
+                };
+
+                report.push_str(&format!("{}{}\n", line_prefix, lines[line_idx]));
+
+                // Add error marker if this is the error line
+                if is_error_line {
+                    let marker = " ".repeat(self.loc.start.saturating_sub(1))
+                        + &"^".repeat((self.loc.end - self.loc.start).max(1));
+
+                    report.push_str(&format!("    {}\n", marker));
+                }
             }
         }
 
@@ -49,7 +66,6 @@ impl ErrorReport {
             report.push_str(&format!("Hint: {}\n", self.hint.as_ref().unwrap()));
         }
 
-        report.push_str(&format!("Error: {}\n", self.message));
         report
     }
 

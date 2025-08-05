@@ -6,5 +6,7 @@ SOURCE:
 #1abcdef
 
 ERROR:
-  2 | #1abcdef
 Error: Expected an expression
+  1 > | #1abcdef
+    ^
+Hint: Identifiers cannot start with a special character

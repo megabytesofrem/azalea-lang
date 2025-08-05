@@ -1,6 +1,6 @@
 //! Expression parsing functions for Azalea
 
-use super::syntax_error::SyntaxError;
+use super::error::ParserError;
 use super::{Assoc, Parser};
 use crate::ast::ast_types::{RecordExpr, Ty};
 use crate::lexer::{Token, TokenKind};
@@ -61,7 +61,7 @@ impl<'a> Parser<'a> {
 
         let token = self
             .peek()
-            .ok_or(SyntaxError::ExpectedExpr(location.clone()))?;
+            .ok_or(ParserError::ExpectedExpr(location.clone()))?;
 
         // println!(
         //     "parse_main_expr: encountered token {:?} at {:?}",
@@ -82,7 +82,7 @@ impl<'a> Parser<'a> {
                 // Subexpressions
                 let expr = self.parse_expr()?;
                 self.expect(TokenKind::RParen)
-                    .map_err(|_| SyntaxError::MissingClosingParen(location))?;
+                    .map_err(|_| ParserError::MissingClosingParen(location))?;
 
                 Ok(expr)
             }
@@ -112,7 +112,7 @@ impl<'a> Parser<'a> {
                 self.parse_lambda()
             }
 
-            _ => Err(SyntaxError::ExpectedExpr(location)),
+            _ => Err(ParserError::ExpectedExpr(location)),
         }
     }
 
@@ -151,7 +151,7 @@ impl<'a> Parser<'a> {
                                 self.next(); // consume the '['
                                 let index_expr = self.parse_expr()?;
                                 self.expect(TokenKind::RSquare).map_err(|_| {
-                                    SyntaxError::MissingClosingSquareBracket(base_expr.loc.clone())
+                                    ParserError::MissingClosingSquareBracket(base_expr.loc.clone())
                                 })?;
 
                                 let array_index = Expr::ArrayIndex {
@@ -167,13 +167,13 @@ impl<'a> Parser<'a> {
                             _ => {
                                 // Invalid syntax after dot
                                 let location = base_expr.loc.clone();
-                                return Err(SyntaxError::InvalidTokenAfterDot(location));
+                                return Err(ParserError::InvalidTokenAfterDot(location));
                             }
                         }
                     } else {
                         // EOF after dot
                         let location = base_expr.loc.clone();
-                        return Err(SyntaxError::InvalidTokenAfterDot(location));
+                        return Err(ParserError::InvalidTokenAfterDot(location));
                     }
                 }
 
@@ -207,9 +207,9 @@ impl<'a> Parser<'a> {
                                     name
                                 }
                                 Some(Token { location, .. }) => {
-                                    return Err(SyntaxError::InvalidRecordFormat(location));
+                                    return Err(ParserError::InvalidRecordFormat(location));
                                 }
-                                None => return Err(SyntaxError::UnexpectedEOF),
+                                None => return Err(ParserError::UnexpectedEOF),
                             };
 
                             self.expect(TokenKind::Colon)?;
@@ -273,7 +273,7 @@ impl<'a> Parser<'a> {
             TokenKind::IntLit | TokenKind::HexIntLit => Ok(Literal::Int(token.to_int_literal())),
             TokenKind::FloatLit => Ok(Literal::Float(token.literal.parse().unwrap())),
             TokenKind::StringLit => Ok(Literal::String(token.literal.to_string())),
-            _ => Err(SyntaxError::ExpectedExpr(location)),
+            _ => Err(ParserError::ExpectedExpr(location)),
         }
     }
 
@@ -432,7 +432,7 @@ impl<'a> Parser<'a> {
                 println!("Parsing named record expression");
 
                 // Consume the next token e.g State { counter: 0 }
-                let name_token = self.next().ok_or(SyntaxError::UnexpectedEOF)?;
+                let name_token = self.next().ok_or(ParserError::UnexpectedEOF)?;
                 name_token.literal.to_string()
             }
             Some(TokenKind::Dot) => {
@@ -444,7 +444,7 @@ impl<'a> Parser<'a> {
             }
 
             // Error: expected a dot (anonymous record) or a name (named record)
-            _ => return Err(SyntaxError::ExpectedExpr(location)),
+            _ => return Err(ParserError::ExpectedExpr(location)),
         };
 
         // Unconditionally expect a left brace
@@ -463,8 +463,8 @@ impl<'a> Parser<'a> {
                     self.next();
                     name
                 }
-                Some(Token { location, .. }) => return Err(SyntaxError::ExpectedExpr(location)),
-                None => return Err(SyntaxError::UnexpectedEOF),
+                Some(Token { location, .. }) => return Err(ParserError::ExpectedExpr(location)),
+                None => return Err(ParserError::UnexpectedEOF),
             };
 
             self.expect(TokenKind::Colon)?;

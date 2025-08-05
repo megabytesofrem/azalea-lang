@@ -3,10 +3,10 @@ source: crates/azalea-core/src/parse/parser_tests.rs
 expression: output
 ---
 SOURCE:
-$florbble
+"Hello, world!
 
 ERROR:
 Error: Expected an expression
-  1 > | $florbble
+  1 > | "Hello, world!
     ^
-Hint: Identifiers cannot start with a special character
+Hint: Unterminated string literal

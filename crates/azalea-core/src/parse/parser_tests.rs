@@ -19,13 +19,18 @@ macro_rules! assert_success {
 
 macro_rules! assert_error {
     ($src:expr) => {
-        let error = crate::parse::parser_tests::expect_error($src);
+        let error = crate::parse::parser_tests::expect_error($src, None);
+        let output = format!("SOURCE:\n{}\n\nERROR:\n{}", $src, error);
+        assert_snapshot!(output);
+    };
+    ($src:expr, $hint:expr) => {
+        let error = crate::parse::parser_tests::expect_error($src, Some($hint));
         let output = format!("SOURCE:\n{}\n\nERROR:\n{}", $src, error);
         assert_snapshot!(output);
     };
 }
 
-pub fn expect_error(src: &str) -> String {
+pub fn expect_error(src: &str, hint: Option<&str>) -> String {
     let tokens = crate::lexer::lex_tokens(src);
     let mut parser = crate::parse::Parser::new(tokens);
 
@@ -35,6 +40,10 @@ pub fn expect_error(src: &str) -> String {
         Ok(_) => panic!("Expected an error, but got a valid expression"),
         Err(e) => {
             let mut report = e.report();
+
+            if let Some(hint) = hint {
+                report.hint = Some(hint.to_string());
+            }
             report.source = src.to_string();
 
             report.show_pretty_source()
@@ -45,8 +54,23 @@ pub fn expect_error(src: &str) -> String {
 // Test cases
 #[test]
 fn invalid_identifier() {
-    assert_error!("$florbble");
-    assert_error!("#1abcdef");
+    assert_error!(
+        "$florbble",
+        "Identifiers cannot start with a special character"
+    );
+    assert_error!(
+        "#1abcdef",
+        "Identifiers cannot start with a special character"
+    );
+}
+
+#[test]
+fn bad_string_literal() {
+    assert_error!("\"Hello, world!", "Unterminated string literal");
+    assert_error!(
+        "\"Hello, \\xworld\"",
+        "Invalid escape sequence in string literal"
+    );
 }
 
 #[test]

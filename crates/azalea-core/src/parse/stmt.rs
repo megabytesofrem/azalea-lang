@@ -1,6 +1,6 @@
 use super::Parser;
 use super::base as parser;
-use super::syntax_error::SyntaxError;
+use super::error::ParserError;
 use crate::ast::Block;
 use crate::ast::Stmt;
 use crate::ast::ast_types::Enum;
@@ -36,7 +36,7 @@ impl<'a> Parser<'a> {
                     Ok(spanned(Stmt::Expr(self.parse_expr()?), location))
                 }
             }
-            _ => Err(SyntaxError::UnexpectedToken {
+            _ => Err(ParserError::UnexpectedToken {
                 token: self.peek().map(|t| t.kind).unwrap(),
                 expected_any: expected_tokens,
                 location,

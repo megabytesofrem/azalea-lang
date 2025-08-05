@@ -3,7 +3,7 @@
 use crate::ast::ast_types::{Function, Ty, TypedPair};
 use crate::lexer::{Op, TokenKind};
 
-use super::syntax_error::SyntaxError;
+use super::error::ParserError;
 use super::{Parser, base as parser};
 
 impl TokenKind {
@@ -46,7 +46,7 @@ impl TokenKind {
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_typename(&mut self) -> parser::Return<Ty> {
-        let token = self.next().ok_or(SyntaxError::UnexpectedEOF)?;
+        let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
 
         match token.kind {
             TokenKind::KwType(ref type_name) => match type_name.as_str() {
@@ -55,7 +55,7 @@ impl<'a> Parser<'a> {
                 "String" => Ok(Ty::String),
                 "Bool" => Ok(Ty::Bool),
                 "Unit" => Ok(Ty::Unit),
-                _ => Err(SyntaxError::ExpectedType(token.location)),
+                _ => Err(ParserError::ExpectedType(token.location)),
             },
             TokenKind::Name => match token.literal {
                 "int" => Ok(Ty::Int),
@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
                 _ => Ok(Ty::TypeCons(token.literal.to_string(), Vec::new())),
             },
 
-            _ => Err(SyntaxError::ExpectedType(token.location)),
+            _ => Err(ParserError::ExpectedType(token.location)),
         }
     }
 
