@@ -3,16 +3,10 @@ source: crates/azalea-core/src/typeck/tests.rs
 expression: output
 ---
 TYPE1:
-Array(
-    Var(
-        "a",
-    ),
-)
+[ᵗa]
 
 TYPE2:
-Array(
-    Int,
-)
+[Int]
 
 RESULT:
 Ok(

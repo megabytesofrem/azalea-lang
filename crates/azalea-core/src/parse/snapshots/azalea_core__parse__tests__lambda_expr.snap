@@ -3,7 +3,7 @@ source: crates/azalea-core/src/parse/tests.rs
 expression: output
 ---
 SOURCE:
-"Hello, world!"
+\(x) -> x + 1
 
 EXPRESSION:
-"Hello, world!" @ (L1, C0:15)
+fn(x) -> ? { (x + 1) } @ (L1, C0:1)

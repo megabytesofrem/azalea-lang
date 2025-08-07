@@ -5,9 +5,7 @@ expression: output
 VAR: a
 
 TYPE:
-Var(
-    "a",
-)
+ᵗa
 
 RESULT:
 true

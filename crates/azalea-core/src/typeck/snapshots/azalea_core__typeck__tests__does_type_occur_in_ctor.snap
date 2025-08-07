@@ -5,14 +5,7 @@ expression: output
 VAR: a
 
 TYPE:
-TypeCons(
-    "a",
-    [
-        Var(
-            "a",
-        ),
-    ],
-)
+ᵗa[ᵗa]
 
 RESULT:
 true

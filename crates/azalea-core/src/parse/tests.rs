@@ -1,13 +1,15 @@
 use insta::assert_snapshot;
 
+use crate::ast::pretty::{Pretty, pretty_with_loc};
 use crate::{parse_expr, parse_stmt};
 
 macro_rules! assert_success {
     ($src:expr) => {
         let expr = crate::parse_expr!($src).unwrap();
         let output = format!(
-            "SOURCE:\n{}\n\nEXPRESSION:\n{} @ {}",
-            $src, expr.target, expr.loc
+            "SOURCE:\n{}\n\nEXPRESSION:\n{}",
+            $src,
+            pretty_with_loc(&expr.target, &expr.loc)
         );
         assert_snapshot!(output);
     };
@@ -70,7 +72,7 @@ fn bad_string_literal() {
 }
 
 #[test]
-fn parse_literal() {
+fn literals() {
     assert_success!("42");
     assert_success!("0x123");
     assert_success!("3.14");
@@ -78,23 +80,19 @@ fn parse_literal() {
 }
 
 #[test]
-fn parse_binary_expr() {
+fn binary_and_unary_expr() {
+    assert_success!("!42");
     assert_success!("1 + 2 * 3");
     // assert_success!("(1 + 2) * 3");
 }
 
 #[test]
-fn parse_unary_expr() {
-    assert_success!("!42");
-}
-
-#[test]
-fn parse_array() {
+fn array() {
     assert_success!("[1, 2, 3]");
 }
 
 #[test]
-fn parse_if_expr() {
+fn if_expr() {
     let expr = parse_expr!("if 1 == 1 then 42 end");
     println!("{:#?}", expr);
 
@@ -102,19 +100,36 @@ fn parse_if_expr() {
 }
 
 #[test]
-fn parse_lambda_expr() {
+fn lambda_expr() {
     assert_success!("\\(x) -> x + 1");
+    assert_success!("\\(x, y) -> x + y");
 }
 
 #[test]
-fn parse_complex_literals() {
+fn complex_literals() {
     assert_success!("[1, 2, 3]");
     assert_success!(".{ a: 1, b: 2 }");
     assert_success!(".{ a: 1, b: [2, 3] }");
 }
 
 #[test]
-fn parse_for() {
+fn let_stmt() {
+    let stmts = [
+        "let x = 42",
+        "let x: Int = 42",
+        "let name: String = \"Charlotte\"",
+        "let lottery_numbers = [21, 38, 42, 14]",
+    ];
+
+    for stmt in stmts {
+        let result = parse_stmt!(stmt);
+        let output = format!("SOURCE:\n{}\n\nAST:\n{:#?}", stmt, result);
+        assert_snapshot!(output);
+    }
+}
+
+#[test]
+fn for_loop() {
     let src = "for x in [1, 2, 3] do let x = 5 end";
     let result = parse_stmt!(src);
     let output = format!("SOURCE:\n{}\n\nAST:\n{:#?}", src, result);

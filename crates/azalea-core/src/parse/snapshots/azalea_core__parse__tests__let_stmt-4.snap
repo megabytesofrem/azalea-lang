@@ -1,0 +1,80 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+let lottery_numbers = [21, 38, 42, 14]
+
+AST:
+Ok(
+    Span {
+        target: Let {
+            name: "lottery_numbers",
+            ty: Unresolved,
+            value: Span {
+                target: Array {
+                    elements: [
+                        Span {
+                            target: Literal(
+                                Int(
+                                    21,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 23,
+                                end: 25,
+                            },
+                        },
+                        Span {
+                            target: Literal(
+                                Int(
+                                    38,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 27,
+                                end: 29,
+                            },
+                        },
+                        Span {
+                            target: Literal(
+                                Int(
+                                    42,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 31,
+                                end: 33,
+                            },
+                        },
+                        Span {
+                            target: Literal(
+                                Int(
+                                    14,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 35,
+                                end: 37,
+                            },
+                        },
+                    ],
+                },
+                loc: SourceLoc {
+                    line: 1,
+                    start: 22,
+                    end: 23,
+                },
+            },
+        },
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 3,
+        },
+    },
+)

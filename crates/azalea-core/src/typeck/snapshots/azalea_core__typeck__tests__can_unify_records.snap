@@ -3,20 +3,10 @@ source: crates/azalea-core/src/typeck/tests.rs
 expression: output
 ---
 TYPE1:
-Record(
-    Record {
-        name: "a",
-        fields: [],
-    },
-)
+ʳa {  }
 
 TYPE2:
-Record(
-    Record {
-        name: "b",
-        fields: [],
-    },
-)
+ʳb {  }
 
 RESULT:
 Ok(

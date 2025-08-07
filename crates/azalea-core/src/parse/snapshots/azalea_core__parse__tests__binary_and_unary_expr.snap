@@ -3,7 +3,7 @@ source: crates/azalea-core/src/parse/tests.rs
 expression: output
 ---
 SOURCE:
-\(x) -> x + 1
+!42
 
 EXPRESSION:
-\(x) -> (x + 1) : _ @ (L1, C0:1)
+(! 42) @ (L1, C0:1)

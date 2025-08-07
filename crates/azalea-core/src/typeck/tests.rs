@@ -5,7 +5,7 @@ use crate::parse::span::{Span, spanned};
 use crate::typeck::typecheck::{Typechecker, TypingEnv};
 use insta::assert_snapshot;
 
-macro_rules! assert_typecheck_success {
+macro_rules! assert_typechecks {
     ($src:expr) => {{
         let stmt = crate::parse_stmt!($src).unwrap();
         let mut tc = Typechecker::new();
@@ -19,26 +19,30 @@ macro_rules! assert_typecheck_success {
     }};
 }
 
-macro_rules! assert_infer_success {
+macro_rules! assert_infer {
     ($expr:expr) => {{
         let mut tc = Typechecker::new();
         let mut env = TypingEnv::new();
         let result = tc.infer_type(&mut env, &$expr, SourceLoc::default());
         let output = format!(
-            "EXPR:\n{:#?}\n\nRESULT:\n{:#?}\n\nENV:\n{:#?}",
-            $expr, result, env
+            "EXPR:\n{}\n\nRESULT:\n{:#?}\n\nENV:\n{:#?}",
+            crate::ast::pretty::pretty(&$expr),
+            result,
+            env
         );
         assert_snapshot!(output);
     }};
 }
 
-macro_rules! assert_unify_success {
+macro_rules! assert_unify {
     ($ty1:expr, $ty2:expr) => {{
         let mut tc = Typechecker::new();
         let result = tc.unify(&$ty1, &$ty2, SourceLoc::default());
         let output = format!(
-            "TYPE1:\n{:#?}\n\nTYPE2:\n{:#?}\n\nRESULT:\n{:#?}",
-            $ty1, $ty2, result
+            "TYPE1:\n{}\n\nTYPE2:\n{}\n\nRESULT:\n{:#?}",
+            crate::ast::pretty::pretty(&$ty1),
+            crate::ast::pretty::pretty(&$ty2),
+            result
         );
         assert_snapshot!(output);
     }};
@@ -48,9 +52,12 @@ macro_rules! assert_occurs_check {
     ($var:expr, $ty:expr) => {{
         let tc = Typechecker::new();
         let result = tc.occurs_check($var, &$ty);
+
         let output = format!(
-            "VAR: {}\n\nTYPE:\n{:#?}\n\nRESULT:\n{:#?}",
-            $var, $ty, result
+            "VAR: {}\n\nTYPE:\n{}\n\nRESULT:\n{}",
+            $var,
+            crate::ast::pretty::pretty(&$ty),
+            result
         );
         assert_snapshot!(output);
     }};
@@ -79,7 +86,7 @@ fn primitive_types_are_not_infinite() {
 
 #[test]
 fn can_unify_valid_type_ctor() {
-    assert_unify_success!(
+    assert_unify!(
         Ty::TypeCons("List".to_string(), vec![Ty::Var("a".to_string())]),
         Ty::TypeCons("List".to_string(), vec![Ty::Int])
     );
@@ -87,7 +94,7 @@ fn can_unify_valid_type_ctor() {
 
 #[test]
 fn cannot_unify_infinite_type_ctor() {
-    assert_unify_success!(
+    assert_unify!(
         Ty::TypeCons("A".to_string(), vec![Ty::Var("a".to_string())]),
         Ty::TypeCons("a".to_string(), vec![Ty::Var("a".to_string())])
     );
@@ -95,7 +102,7 @@ fn cannot_unify_infinite_type_ctor() {
 
 #[test]
 fn can_unify_arrays() {
-    assert_unify_success!(
+    assert_unify!(
         Ty::Array(Box::new(Ty::Var("a".to_string()))),
         Ty::Array(Box::new(Ty::Int))
     );
@@ -103,7 +110,7 @@ fn can_unify_arrays() {
 
 #[test]
 fn can_unify_records() {
-    assert_unify_success!(
+    assert_unify!(
         Ty::Record(Box::new(Record {
             name: "a".to_string(),
             fields: vec![],
@@ -117,7 +124,7 @@ fn can_unify_records() {
 
 #[test]
 fn cannot_unify_records_with_different_fields() {
-    assert_unify_success!(
+    assert_unify!(
         Ty::Record(Box::new(Record {
             name: "Person".to_string(),
             fields: vec![("age".to_string(), Ty::Int)],
@@ -130,13 +137,36 @@ fn cannot_unify_records_with_different_fields() {
 }
 
 #[test]
+fn infer_most_general_types() {
+    let mut tc = Typechecker::new();
+    let mut env = TypingEnv::new();
+
+    let f = Function::new_with_expr(
+        "id".to_string(),
+        vec![("x".to_string(), Ty::Var("x".to_string()))],
+        Ty::Unresolved,
+        Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
+    );
+
+    let fn_decl = Stmt::FnDecl(f.clone());
+    let result = tc.check(
+        &mut env,
+        &spanned(fn_decl, SourceLoc::default()),
+        SourceLoc::default(),
+    );
+
+    let output = format!("RESULT:\n{:#?}\n\nENV:\n{:#?}", result, env);
+    assert_snapshot!(output);
+}
+
+#[test]
 fn typecheck_for() {
-    assert_typecheck_success!("for x in [1, 2, 3] do let x = 5 end");
+    assert_typechecks!("for x in [1, 2, 3] do let x = 5 end");
 }
 
 #[test]
 fn typecheck_while() {
-    assert_typecheck_success!("while 1==1 do let x = 5 end");
+    assert_typechecks!("while 1==1 do let x = 5 end");
 }
 
 #[test]
@@ -179,28 +209,5 @@ fn typecheck_lambda() {
         body: Box::new(spanned(Expr::Ident("a".to_string()), SourceLoc::default())),
     };
 
-    assert_infer_success!(lambda_expr);
-}
-
-#[test]
-fn infer_most_general_types() {
-    let mut tc = Typechecker::new();
-    let mut env = TypingEnv::new();
-
-    let f = Function::new_with_expr(
-        "id".to_string(),
-        vec![("x".to_string(), Ty::Var("x".to_string()))],
-        Ty::Unresolved,
-        Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
-    );
-
-    let fn_decl = Stmt::FnDecl(f.clone());
-    let result = tc.check(
-        &mut env,
-        &spanned(fn_decl, SourceLoc::default()),
-        SourceLoc::default(),
-    );
-
-    let output = format!("RESULT:\n{:#?}\n\nENV:\n{:#?}", result, env);
-    assert_snapshot!(output);
+    assert_infer!(lambda_expr);
 }

@@ -3,29 +3,7 @@ source: crates/azalea-core/src/typeck/tests.rs
 expression: output
 ---
 EXPR:
-Lam {
-    args: [
-        (
-            "a",
-            Var(
-                "a",
-            ),
-        ),
-    ],
-    return_ty: Var(
-        "a",
-    ),
-    body: Span {
-        target: Ident(
-            "a",
-        ),
-        loc: SourceLoc {
-            line: 1,
-            start: 0,
-            end: 0,
-        },
-    },
-}
+fn(a) -> ᵗa { a }
 
 RESULT:
 Ok(

@@ -1,0 +1,33 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+let name: String = "Charlotte"
+
+AST:
+Ok(
+    Span {
+        target: Let {
+            name: "name",
+            ty: String,
+            value: Span {
+                target: Literal(
+                    String(
+                        "\"Charlotte\"",
+                    ),
+                ),
+                loc: SourceLoc {
+                    line: 1,
+                    start: 19,
+                    end: 30,
+                },
+            },
+        },
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 3,
+        },
+    },
+)

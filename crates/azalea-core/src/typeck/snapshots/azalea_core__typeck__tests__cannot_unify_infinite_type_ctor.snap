@@ -3,24 +3,10 @@ source: crates/azalea-core/src/typeck/tests.rs
 expression: output
 ---
 TYPE1:
-TypeCons(
-    "A",
-    [
-        Var(
-            "a",
-        ),
-    ],
-)
+ᵗA[ᵗa]
 
 TYPE2:
-TypeCons(
-    "a",
-    [
-        Var(
-            "a",
-        ),
-    ],
-)
+ᵗa[ᵗa]
 
 RESULT:
 Err(
