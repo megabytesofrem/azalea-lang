@@ -1,0 +1,9 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+0x123
+
+EXPRESSION:
+291 @ (L1, C0:5)

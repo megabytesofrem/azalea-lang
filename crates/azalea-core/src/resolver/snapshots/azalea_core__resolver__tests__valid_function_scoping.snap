@@ -1,0 +1,24 @@
+---
+source: crates/azalea-core/src/resolver/tests.rs
+expression: "format!(\"STATE:\\n---\\n: {:#?}\", resolver)"
+---
+STATE:
+---
+: Resolver {
+    scopes: [
+        Scope {
+            variables: {},
+            functions: {
+                "global_func": Fn(
+                    Function {
+                        name: "global_func",
+                        args: [],
+                        return_ty: Unit,
+                        body: None,
+                        body_expr: None,
+                    },
+                ),
+            },
+        },
+    ],
+}

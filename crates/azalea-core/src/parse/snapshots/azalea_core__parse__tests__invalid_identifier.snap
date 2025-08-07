@@ -1,0 +1,12 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+$florbble
+
+ERROR:
+Error: Expected an expression
+  1 > | $florbble
+    ^
+Hint: Identifiers cannot start with a special character

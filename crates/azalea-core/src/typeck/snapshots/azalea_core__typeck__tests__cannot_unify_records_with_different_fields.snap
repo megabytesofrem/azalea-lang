@@ -1,0 +1,62 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+TYPE1:
+Record(
+    Record {
+        name: "Person",
+        fields: [
+            (
+                "age",
+                Int,
+            ),
+        ],
+    },
+)
+
+TYPE2:
+Record(
+    Record {
+        name: "Person",
+        fields: [
+            (
+                "name",
+                String,
+            ),
+        ],
+    },
+)
+
+RESULT:
+Err(
+    TypeMismatch {
+        expected: Record(
+            Record {
+                name: "Person",
+                fields: [
+                    (
+                        "age",
+                        Int,
+                    ),
+                ],
+            },
+        ),
+        found: Record(
+            Record {
+                name: "Person",
+                fields: [
+                    (
+                        "name",
+                        String,
+                    ),
+                ],
+            },
+        ),
+        location: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+)

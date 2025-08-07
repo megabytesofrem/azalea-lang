@@ -1,0 +1,9 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+!42
+
+EXPRESSION:
+!(42) @ (L1, C0:1)

@@ -1,0 +1,92 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+for x in [1, 2, 3] do let x = 5 end
+
+AST:
+Ok(
+    Span {
+        target: For {
+            name: "x",
+            iterable: Span {
+                target: Array {
+                    elements: [
+                        Span {
+                            target: Literal(
+                                Int(
+                                    1,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 10,
+                                end: 11,
+                            },
+                        },
+                        Span {
+                            target: Literal(
+                                Int(
+                                    2,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 13,
+                                end: 14,
+                            },
+                        },
+                        Span {
+                            target: Literal(
+                                Int(
+                                    3,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 16,
+                                end: 17,
+                            },
+                        },
+                    ],
+                },
+                loc: SourceLoc {
+                    line: 1,
+                    start: 9,
+                    end: 10,
+                },
+            },
+            body: [
+                Span {
+                    target: Let {
+                        name: "x",
+                        ty: Unresolved,
+                        value: Span {
+                            target: Literal(
+                                Int(
+                                    5,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 30,
+                                end: 31,
+                            },
+                        },
+                    },
+                    loc: SourceLoc {
+                        line: 1,
+                        start: 22,
+                        end: 25,
+                    },
+                },
+            ],
+        },
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 3,
+        },
+    },
+)

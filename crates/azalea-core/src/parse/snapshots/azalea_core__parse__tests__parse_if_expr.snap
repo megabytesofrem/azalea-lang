@@ -1,0 +1,11 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+if 1 == 1 then 42 end
+
+EXPRESSION:
+if (1 == 1) then do
+<stmt>
+end  @ (L1, C0:2)

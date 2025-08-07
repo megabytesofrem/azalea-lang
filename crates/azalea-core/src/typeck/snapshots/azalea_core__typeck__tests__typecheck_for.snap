@@ -1,0 +1,18 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+SOURCE:
+for x in [1, 2, 3] do let x = 5 end
+
+RESULT:
+Err(
+    UnificationError(
+        "Cannot unify Unresolved with Int",
+    ),
+)
+
+ENV:
+{
+    "x": Int,
+}

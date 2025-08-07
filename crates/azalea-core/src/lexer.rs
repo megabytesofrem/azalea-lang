@@ -216,6 +216,8 @@ pub enum TokenKind {
     KwElse,
     #[token("for")]
     KwFor,
+    #[token("in")]
+    KwIn,
     #[token("while")]
     KwWhile,
     #[token("do")]
@@ -264,12 +266,6 @@ pub struct Token<'a> {
     pub literal: &'a str,
 }
 
-// Wrapper type for a peekable iterator over lexing results
-pub type LexerIter<'a> = Peekable<Box<TokenIter<'a>>>;
-
-/// Result type for lexing operations - either a valid token or a lexical error
-pub type LexResult<'a> = Result<Token<'a>, LexicalError>;
-
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Op {
     Add,
@@ -286,6 +282,12 @@ pub enum Op {
     Neg,
     Not,
 }
+
+// Wrapper type for a peekable iterator over lexing results
+pub type LexerIter<'a> = Peekable<Box<TokenIter<'a>>>;
+
+/// Result type for lexing operations - either a valid token or a lexical error
+pub type LexResult<'a> = Result<Token<'a>, LexicalError>;
 
 #[derive(Clone)]
 pub struct TokenIter<'a> {

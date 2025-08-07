@@ -15,6 +15,8 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_stmt(&mut self) -> parser::Return<Span<Stmt>> {
         let expected_tokens = vec![
             TokenKind::KwLet,
+            TokenKind::KwFor,
+            TokenKind::KwWhile,
             TokenKind::KwRecord,
             TokenKind::KwEnum,
             TokenKind::KwFn,
@@ -25,6 +27,8 @@ impl<'a> Parser<'a> {
 
         match self.peek().map(|t| t.kind) {
             Some(TokenKind::KwLet) => self.parse_let(),
+            Some(TokenKind::KwFor) => self.parse_for(),
+            Some(TokenKind::KwWhile) => self.parse_while(),
             Some(TokenKind::KwRecord) => self.parse_record_decl(),
             Some(TokenKind::KwEnum) => self.parse_enum_decl(),
             Some(TokenKind::KwFn) => self.parse_fn_decl(),
@@ -104,6 +108,49 @@ impl<'a> Parser<'a> {
                 name: name.to_string(),
                 ty,
                 value: Box::new(value),
+            },
+            location,
+        ))
+    }
+
+    fn parse_for(&mut self) -> parser::Return<Span<Stmt>> {
+        // for name in expr do .. end
+        let location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        self.expect(TokenKind::KwFor)?;
+        let name = self.expect(TokenKind::Name)?.literal;
+
+        self.expect(TokenKind::KwIn)?;
+        println!("Parsing for loop, next token: {:?}", self.peek());
+
+        let iterable = self.parse_expr()?;
+
+        let body = self.parse_block()?;
+
+        Ok(spanned(
+            Stmt::For {
+                name: name.to_string(),
+                iterable: Box::new(iterable),
+                body,
+            },
+            location,
+        ))
+    }
+
+    fn parse_while(&mut self) -> parser::Return<Span<Stmt>> {
+        // while expr do .. end
+        let location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        self.expect(TokenKind::KwWhile)?;
+
+        let cond = self.parse_expr()?;
+
+        let body = self.parse_block()?;
+
+        Ok(spanned(
+            Stmt::While {
+                cond: Box::new(cond),
+                body,
             },
             location,
         ))

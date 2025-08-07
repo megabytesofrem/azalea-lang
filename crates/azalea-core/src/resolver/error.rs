@@ -1,0 +1,81 @@
+use crate::{ast::ast_types::Ty, error::error_report::ErrorReport, lexer::SourceLoc};
+
+#[derive(Debug, Clone)]
+pub enum SemanticError {
+    UnificationError(String),
+
+    UndefinedVariable(String),
+    RedefinedVariable(String),
+    UndefinedFunction(String),
+    EmptyScope,
+
+    OccursCheck {
+        location: SourceLoc,
+    },
+    TypeMismatch {
+        expected: Ty,
+        found: Ty,
+        location: SourceLoc,
+    },
+
+    ExpectedLambda {
+        location: SourceLoc,
+    },
+}
+
+impl SemanticError {
+    pub fn report(&self) -> ErrorReport {
+        match self {
+            SemanticError::UnificationError(msg) => ErrorReport::new(
+                format!("Unification error: {}", msg),
+                "Type error".to_string(),
+                SourceLoc::default(),
+            ),
+
+            SemanticError::UndefinedVariable(name) => ErrorReport::new(
+                format!("Undefined variable: {}", name),
+                "Semantic error".to_string(),
+                SourceLoc::default(),
+            ),
+            SemanticError::RedefinedVariable(name) => ErrorReport::new(
+                format!("Redefined variable: {}", name),
+                "Semantic error".to_string(),
+                SourceLoc::default(),
+            ),
+            SemanticError::UndefinedFunction(name) => ErrorReport::new(
+                format!("Undefined function: {}", name),
+                "Semantic error".to_string(),
+                SourceLoc::default(),
+            ),
+            SemanticError::EmptyScope => ErrorReport::new(
+                "Attempted to pop an empty scope".to_string(),
+                "Semantic error".to_string(),
+                SourceLoc::default(),
+            ),
+
+            SemanticError::OccursCheck { location } => ErrorReport::new(
+                "Occurs check failed".to_string(),
+                "Type error".to_string(),
+                location.clone(),
+            )
+            .with_hint("Check for infinite types or circular type references".to_string()),
+
+            SemanticError::TypeMismatch {
+                expected,
+                found,
+                location,
+            } => ErrorReport::new(
+                format!("Type mismatch: expected {:?}, found {:?}", expected, found),
+                "Type error".to_string(),
+                location.clone(),
+            ),
+
+            SemanticError::ExpectedLambda { location } => ErrorReport::new(
+                "Expected a lambda expression".to_string(),
+                "Semantic error".to_string(),
+                location.clone(),
+            )
+            .with_hint("Expected a lambda in the format of: \\(params) -> expr".to_string()),
+        }
+    }
+}

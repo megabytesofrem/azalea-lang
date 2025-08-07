@@ -1,9 +1,0 @@
----
-source: crates/azalea-core/src/typeck/typecheck_tests.rs
-expression: "format!(\"Result: {:#?}\", result)"
----
-Result: Ok(
-    {
-        "a": Int,
-    },
-)

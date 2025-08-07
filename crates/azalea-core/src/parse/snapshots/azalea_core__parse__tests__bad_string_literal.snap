@@ -1,0 +1,12 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+"Hello, world!
+
+ERROR:
+Error: Expected an expression
+  1 > | "Hello, world!
+    ^
+Hint: Unterminated string literal

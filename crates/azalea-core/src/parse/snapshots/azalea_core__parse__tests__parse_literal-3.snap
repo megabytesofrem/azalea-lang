@@ -1,0 +1,9 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+3.14
+
+EXPRESSION:
+3.14 @ (L1, C0:4)

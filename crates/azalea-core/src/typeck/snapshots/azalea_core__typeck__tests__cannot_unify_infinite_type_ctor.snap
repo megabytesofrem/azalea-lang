@@ -1,0 +1,30 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+TYPE1:
+TypeCons(
+    "A",
+    [
+        Var(
+            "a",
+        ),
+    ],
+)
+
+TYPE2:
+TypeCons(
+    "a",
+    [
+        Var(
+            "a",
+        ),
+    ],
+)
+
+RESULT:
+Err(
+    UnificationError(
+        "Cannot unify TypeCons(\"A\", [Var(\"a\")]) with TypeCons(\"a\", [Var(\"a\")])",
+    ),
+)

@@ -1,0 +1,71 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+RESULT:
+Ok(
+    (),
+)
+
+ENV:
+{
+    "f": Fn(
+        Function {
+            name: "f",
+            args: [
+                (
+                    "y",
+                    Int,
+                ),
+            ],
+            return_ty: Int,
+            body: Some(
+                [
+                    Span {
+                        target: Expr(
+                            Span {
+                                target: Literal(
+                                    Int(
+                                        50,
+                                    ),
+                                ),
+                                loc: SourceLoc {
+                                    line: 1,
+                                    start: 0,
+                                    end: 0,
+                                },
+                            },
+                        ),
+                        loc: SourceLoc {
+                            line: 1,
+                            start: 0,
+                            end: 0,
+                        },
+                    },
+                    Span {
+                        target: Expr(
+                            Span {
+                                target: Literal(
+                                    Int(
+                                        100,
+                                    ),
+                                ),
+                                loc: SourceLoc {
+                                    line: 1,
+                                    start: 0,
+                                    end: 0,
+                                },
+                            },
+                        ),
+                        loc: SourceLoc {
+                            line: 1,
+                            start: 0,
+                            end: 0,
+                        },
+                    },
+                ],
+            ),
+            body_expr: None,
+        },
+    ),
+}

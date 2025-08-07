@@ -1,0 +1,68 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+EXPR:
+Lam {
+    args: [
+        (
+            "a",
+            Var(
+                "a",
+            ),
+        ),
+    ],
+    return_ty: Var(
+        "a",
+    ),
+    body: Span {
+        target: Ident(
+            "a",
+        ),
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
+}
+
+RESULT:
+Ok(
+    Fn(
+        Function {
+            name: "lambda",
+            args: [
+                (
+                    "a",
+                    Var(
+                        "a",
+                    ),
+                ),
+            ],
+            return_ty: Var(
+                "a",
+            ),
+            body: None,
+            body_expr: Some(
+                Span {
+                    target: Ident(
+                        "a",
+                    ),
+                    loc: SourceLoc {
+                        line: 1,
+                        start: 0,
+                        end: 0,
+                    },
+                },
+            ),
+        },
+    ),
+)
+
+ENV:
+{
+    "a": Var(
+        "a",
+    ),
+}

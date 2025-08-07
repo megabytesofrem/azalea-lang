@@ -1,0 +1,18 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+VAR: a
+
+TYPE:
+TypeCons(
+    "a",
+    [
+        Var(
+            "a",
+        ),
+    ],
+)
+
+RESULT:
+true

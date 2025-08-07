@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{fmt, hash::Hash};
 
 use crate::parse::span::Span;
 
@@ -59,6 +59,69 @@ impl PartialEq for Ty {
             (Ty::Enum(a), Ty::Enum(b)) => a == b,
 
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl fmt::Display for Ty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Ty::Int => write!(f, "Int"),
+            Ty::Float => write!(f, "Float"),
+            Ty::String => write!(f, "String"),
+            Ty::Bool => write!(f, "Bool"),
+            Ty::Unit => write!(f, "Unit"),
+            Ty::Any => write!(f, "Any"),
+            Ty::Var(name) => write!(f, "{}", name),
+            Ty::Array(inner) => write!(f, "Array[{}]", inner),
+            Ty::TypeCons(name, args) => {
+                if args.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(
+                        f,
+                        "{}[{}]",
+                        name,
+                        args.iter()
+                            .map(|ty| ty.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            }
+            Ty::Fn(func) => {
+                let args = func
+                    .args
+                    .iter()
+                    .map(|(name, ty)| format!("{}: {}", name, ty))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "fn({} -> {})", args, func.return_ty)
+            }
+            Ty::Record(record) => {
+                let fields = record
+                    .fields
+                    .iter()
+                    .map(|(name, ty)| format!("{}: {}", name, ty))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "Record[{}: {{ {} }}]", record.name, fields)
+            }
+            Ty::Enum(enum_) => {
+                let variants = enum_
+                    .variants
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "Enum[{}: #[{}]]", enum_.name, variants)
+            }
+
+            Ty::Unresolved => write!(f, "_"),
+            Ty::ForAll(vars, inner) => {
+                let vars_str = vars.join(", ");
+                write!(f, "forall {}. {}", vars_str, inner)
+            }
         }
     }
 }

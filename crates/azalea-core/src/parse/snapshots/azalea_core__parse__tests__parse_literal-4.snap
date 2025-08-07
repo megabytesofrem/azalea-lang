@@ -1,0 +1,9 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+"Hello, world!"
+
+EXPRESSION:
+"Hello, world!" @ (L1, C0:15)

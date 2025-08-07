@@ -1,0 +1,7 @@
+---
+source: crates/azalea-core/src/resolver/tests.rs
+expression: snapshot
+---
+RESULT:
+
+'x' has type: Int

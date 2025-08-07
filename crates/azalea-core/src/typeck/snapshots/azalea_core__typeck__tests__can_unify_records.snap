@@ -1,0 +1,24 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+TYPE1:
+Record(
+    Record {
+        name: "a",
+        fields: [],
+    },
+)
+
+TYPE2:
+Record(
+    Record {
+        name: "b",
+        fields: [],
+    },
+)
+
+RESULT:
+Ok(
+    {},
+)

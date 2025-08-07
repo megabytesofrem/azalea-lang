@@ -1,8 +1,9 @@
-use crate::resolver::semantic_error::SemanticError;
+use crate::resolver::error::SemanticError;
 
+pub mod error;
 pub mod resolver;
-pub mod semantic_error;
 
-pub mod resolver_tests;
+#[allow(unused_imports)]
+pub mod tests;
 
 pub type Return<'a, T> = Result<T, SemanticError>;

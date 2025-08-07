@@ -6,8 +6,8 @@ use crate::lexer::SourceLoc;
 use crate::parse::span::Span;
 
 // Name and scope resolution
+use crate::resolver::error::SemanticError;
 use crate::resolver::resolver::Resolver;
-use crate::resolver::semantic_error::SemanticError;
 
 use crate::resolver::Return;
 
@@ -404,6 +404,58 @@ impl Typechecker {
                 self.resolver
                     .define_or_redefine_variable(name.clone(), ty.clone());
                 env.insert(name.clone(), ty.clone());
+                Ok(())
+            }
+
+            Stmt::For {
+                name,
+                iterable,
+                body,
+            } => {
+                let iterable_ty = self.infer_type(env, &iterable.target, iterable.loc.clone())?;
+
+                // For now, this only supports arrays as iterables
+                let iterable_elem_ty = match iterable_ty {
+                    Ty::Array(inner) => *inner,
+                    _ => {
+                        return Err(SemanticError::TypeMismatch {
+                            expected: Ty::Array(Box::new(Ty::Unresolved)),
+                            found: iterable_ty,
+                            location: iterable.loc.clone(),
+                        });
+                    }
+                };
+
+                // Add the loop variable to the typing environment
+                env.insert(name.clone(), iterable_elem_ty.clone());
+                self.resolver.push_scope();
+                self.resolver
+                    .define_variable(name.clone(), iterable_elem_ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
+
+                // Type check the body of the for loop
+                body.iter()
+                    .try_for_each(|stmt| self.check(env, stmt, location.clone()))?;
+
+                self.resolver.pop_scope().map_err(|_| {
+                    SemanticError::UnificationError("Failed to pop for loop scope".to_string())
+                })?;
+
+                env.remove(name);
+                Ok(())
+            }
+
+            Stmt::While { cond, body } => {
+                // Infer the condition type
+                let cond_ty = self.infer_type(env, &cond.target, cond.loc.clone())?;
+
+                // Unify the condition type with boolean
+                self.unify(&cond_ty, &Ty::Bool, cond.loc.clone())?;
+
+                // Type check the body of the while loop
+                body.iter()
+                    .try_for_each(|stmt| self.check(env, stmt, location.clone()))?;
+
                 Ok(())
             }
 

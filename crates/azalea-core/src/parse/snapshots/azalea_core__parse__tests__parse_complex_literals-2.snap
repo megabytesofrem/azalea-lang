@@ -1,0 +1,9 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+.{ a: 1, b: 2 }
+
+EXPRESSION:
+ { a: 1, b: 2 } @ (L1, C0:1)

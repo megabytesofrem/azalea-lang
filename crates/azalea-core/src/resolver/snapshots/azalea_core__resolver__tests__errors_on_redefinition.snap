@@ -1,0 +1,7 @@
+---
+source: crates/azalea-core/src/resolver/tests.rs
+expression: "format! (\"{}\", result_str)"
+---
+RESULT:
+
+'x' defined with type: Int

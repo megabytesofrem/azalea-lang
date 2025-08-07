@@ -1,0 +1,14 @@
+---
+source: crates/azalea-core/src/resolver/tests.rs
+expression: "format!(\"STATE: {:#?}\", resolver)"
+---
+STATE: Resolver {
+    scopes: [
+        Scope {
+            variables: {
+                "x": Int,
+            },
+            functions: {},
+        },
+    ],
+}

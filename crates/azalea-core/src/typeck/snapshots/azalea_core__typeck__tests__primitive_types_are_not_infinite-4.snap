@@ -1,0 +1,11 @@
+---
+source: crates/azalea-core/src/typeck/tests.rs
+expression: output
+---
+VAR: a
+
+TYPE:
+Bool
+
+RESULT:
+false

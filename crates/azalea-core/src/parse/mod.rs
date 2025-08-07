@@ -6,7 +6,7 @@ pub mod span;
 pub mod stmt;
 
 #[cfg(test)]
-pub mod parser_tests;
+pub mod tests;
 
 // Re-export the Parser struct from base
 pub use base::Assoc;

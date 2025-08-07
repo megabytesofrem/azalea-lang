@@ -1,0 +1,12 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+"Hello, \xworld"
+
+ERROR:
+Error: Expected an expression
+  1 > | "Hello, \xworld"
+    ^
+Hint: Invalid escape sequence in string literal
