@@ -135,7 +135,7 @@ impl Emit for JSCodegen {
     fn visit_expr(&mut self, expr: &Expr) -> String {
         match &expr {
             Expr::Literal(lit) => match lit {
-                Literal::Int(i) => i.to_string(),
+                Literal::Int(i) => format!("{}|0", i.to_string()),
                 Literal::Float(f) => f.to_string(),
                 Literal::String(s) => format!("{}", s),
                 Literal::Bool(b) => b.to_string(),
@@ -214,19 +214,19 @@ impl Emit for JSCodegen {
                 } else {
                     // Use block syntax for multi-statement or non-expression branches
                     let mut code = String::new();
-                    code.push_str(&self.pp.print(&format!("if ({}) {{\n", cond_emit)));
-                    let then_branch = self.visit_block(then.clone());
-                    code.push_str(&then_branch);
-                    code.push_str(&self.pp.print("\n}"));
+                    code.push_str(&format!("if ({}) {{\n", cond_emit));
+                    self.pp.indent();
+                    code.push_str(&self.visit_block(then.clone()));
+                    self.pp.dedent();
+                    code.push_str(&self.pp.print("}\n"));
 
-                    // Handle else branch
                     if let Some(else_branch) = else_ {
-                        code.push_str(" else {\n");
-                        let else_code = self.visit_block(else_branch.clone());
-                        code.push_str(&else_code);
-                        code.push_str("\n}");
+                        code.push_str(&self.pp.print("else {\n"));
+                        self.pp.indent();
+                        code.push_str(&self.visit_block(else_branch.clone()));
+                        self.pp.dedent();
+                        code.push_str(&self.pp.print("}\n"));
                     }
-
                     code
                 }
             }
@@ -294,6 +294,7 @@ impl Emit for JSCodegen {
 
                     // Function with a block body
                     let body = self.visit_block(func.body.as_ref().unwrap().clone());
+
                     format!(
                         "function {}({}) {{\n{}\n}}",
                         func.name,
@@ -311,15 +312,15 @@ impl Emit for JSCodegen {
 
     fn visit_block(&mut self, block: Vec<Span<Stmt>>) -> String {
         let mut block_code = String::new();
-        self.pp.indent();
 
+        self.pp.indent();
         for stmt in block {
             let stmt_js = self.visit_stmt(&stmt.target);
             block_code.push_str(&self.pp.print(&stmt_js));
             block_code.push('\n');
         }
-
         self.pp.dedent();
+
         block_code
     }
 
