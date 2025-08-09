@@ -312,45 +312,92 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_if(&mut self) -> parser::Return<Span<Expr>> {
-        // FIXME: This only handles single expressions in the then and else blocks.
-        // We should handle blocks of statements in the future.
-
-        // if condition then [block] else [block] end
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwIf)?;
-
         let cond = self.parse_expr()?;
         self.expect(TokenKind::KwThen)?;
 
-        // For a simple if-then-end, we expect a single expression
-        let then_expr = self.parse_expr()?;
-        let then_loc = location.clone();
-        let then_block = vec![spanned(Stmt::Expr(then_expr), then_loc)];
-
-        let else_block = if self.peek().map(|t| t.kind) == Some(TokenKind::KwElse) {
-            self.next(); // consume the else token
-
-            // For a simple else block, we expect a single expression
-            let else_expr = self.parse_expr()?;
-            let else_loc = self.peek().map(|t| t.location).unwrap_or_default();
-            Some(vec![spanned(Stmt::Expr(else_expr), else_loc)])
+        // Check if this is block-style (then do) or expression-style (then expr)
+        if self.peek().map(|t| t.kind) == Some(TokenKind::KwDo) {
+            self.parse_block_if(cond, location)
         } else {
-            None
-        };
+            self.parse_expression_if(cond, location)
+        }
+    }
+
+    fn parse_block_if(
+        &mut self,
+        cond: Span<Expr>,
+        location: crate::lexer::SourceLoc,
+    ) -> parser::Return<Span<Expr>> {
+        // Block-style: if condition then do ... else do ... end
+        self.expect(TokenKind::KwDo)?; // consume the `do` token
+
+        let then_stmts = self.parse_if_block_statements()?;
+        let else_block = self.parse_optional_else_block()?;
 
         self.expect(TokenKind::KwEnd)?;
 
         Ok(spanned(
             Expr::If {
                 cond: Box::new(cond),
-                then: then_block,
-
-                // Optional else block
+                then: then_stmts,
                 else_: else_block,
             },
             location,
         ))
+    }
+
+    fn parse_expression_if(
+        &mut self,
+        cond: Span<Expr>,
+        location: crate::lexer::SourceLoc,
+    ) -> parser::Return<Span<Expr>> {
+        // Expression-style: if condition then expression else expression end
+        let then_expr = self.parse_expr()?;
+
+        // Else is required for expression-style if
+        self.expect(TokenKind::KwElse)?;
+        let else_expr = self.parse_expr()?;
+        self.expect(TokenKind::KwEnd)?;
+
+        Ok(spanned(
+            Expr::If {
+                cond: Box::new(cond),
+                then: vec![spanned(Stmt::Expr(then_expr), location.clone())],
+                else_: Some(vec![spanned(Stmt::Expr(else_expr), location.clone())]),
+            },
+            location,
+        ))
+    }
+
+    fn parse_if_block_statements(&mut self) -> parser::Return<Vec<Span<Stmt>>> {
+        let mut stmts = Vec::new();
+        while self.peek().map(|t| t.kind) != Some(TokenKind::KwElse)
+            && self.peek().map(|t| t.kind) != Some(TokenKind::KwEnd)
+        {
+            let stmt = self.parse_stmt()?;
+            stmts.push(stmt);
+        }
+        Ok(stmts)
+    }
+
+    fn parse_optional_else_block(&mut self) -> parser::Return<Option<Vec<Span<Stmt>>>> {
+        if self.peek().map(|t| t.kind) != Some(TokenKind::KwElse) {
+            return Ok(None);
+        }
+
+        self.expect(TokenKind::KwElse)?; // consume the `else` token
+        self.expect(TokenKind::KwDo)?; // expect `do` after else in block-style
+
+        let mut else_stmts = Vec::new();
+        while self.peek().map(|t| t.kind) != Some(TokenKind::KwEnd) {
+            let stmt = self.parse_stmt()?;
+            else_stmts.push(stmt);
+        }
+
+        Ok(Some(else_stmts))
     }
 
     fn parse_fncall(&mut self, target: Span<Expr>) -> parser::Return<Span<Expr>> {

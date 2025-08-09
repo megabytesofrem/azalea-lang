@@ -195,20 +195,16 @@ impl Emit for JSCodegen {
                 ))
             }
             Expr::If { cond, then, else_ } => {
-                let mut code = String::new();
                 let cond_emit = self.visit_expr(&cond.target);
 
-                // Loop through and see if any branches contain statements or expressions
-                // If they do, we can desugar them to ternary expressions
-                let mut should_desugar = false;
-                for branch in then.iter().chain(else_.iter().flatten()) {
-                    if let Stmt::Expr(_) = &branch.target {
-                        should_desugar = true;
-                        break;
-                    }
-                }
+                // Check if we can desugar to ternary: both branches must have exactly one Stmt::Expr
+                let can_desugar = then.len() == 1
+                    && matches!(then[0].target, Stmt::Expr(_))
+                    && else_.as_ref().map_or(true, |else_branch| {
+                        else_branch.len() == 1 && matches!(else_branch[0].target, Stmt::Expr(_))
+                    });
 
-                if should_desugar {
+                if can_desugar {
                     desugar_to_ternary(
                         self,
                         &cond,
@@ -216,22 +212,21 @@ impl Emit for JSCodegen {
                         else_.as_ref().map(|e| e.to_vec()),
                     )
                 } else {
-                    // If we cannot desugar, we need to handle the if-else as a block
+                    // Use block syntax for multi-statement or non-expression branches
+                    let mut code = String::new();
                     code.push_str(&self.pp.print(&format!("if ({}) {{\n", cond_emit)));
                     let then_branch = self.visit_block(then.clone());
                     code.push_str(&then_branch);
                     code.push_str(&self.pp.print("\n}"));
 
-                    // Is there an else branch?
-                    let else_branch = else_.clone().map_or_else(
-                        || String::new(),
-                        |else_block| {
-                            let else_code = self.visit_block(else_block);
-                            format!(" else {{\n{}\n}}", else_code)
-                        },
-                    );
+                    // Handle else branch
+                    if let Some(else_branch) = else_ {
+                        code.push_str(" else {\n");
+                        let else_code = self.visit_block(else_branch.clone());
+                        code.push_str(&else_code);
+                        code.push_str("\n}");
+                    }
 
-                    code.push_str(&else_branch);
                     code
                 }
             }

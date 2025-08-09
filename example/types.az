@@ -13,9 +13,9 @@ record Person = {
 let me: Person = .{
   name: "Charlotte",
   age: 24,
-  gender: Gender.female
 }
 
-let my_name: String = me.name
+
 let fav_number: Int = 42
 let pi: Float = 3.14159
+

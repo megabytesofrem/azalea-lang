@@ -1,0 +1,11 @@
+fn ternary_like(x: Int) = if x == 5 then 1 else 0 end
+
+fn block_if(x: Int) = do
+  if x == 5 then do
+    let y: Int = 1
+    console.log(y)
+  else do
+    let y: Int = 0
+    console.log(y)
+  end
+end
