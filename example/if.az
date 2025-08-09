@@ -1,18 +1,24 @@
-fn ternary_like(x: Int) = if x == 5 then 1 else 0 end
+fn ternary_like(x: Int) = 
+  if x == 5 
+    then 1
+    else 0
+
+fn log(x: Any) = do console.log(x) end
 
 fn block_if(x: Int) = do
   if x == 5 then do
-    let y: Int = 1
-    console.log(y)
+    mut y: Int = 0
+    y = 1
+    log(y)
 
     if y == 1 then do
-      console.log("y is 1")
-      console.log("this is a nested if statement")
+      log("y is 1")
+      log("this is a nested if statement")
     else do
-      console.log("y is not 1")
+      log("y is not 1")
     end
   else do
     let y: Int = 0
-    console.log(y)
+    log("x is not 5")
   end
 end

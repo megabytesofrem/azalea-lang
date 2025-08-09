@@ -32,6 +32,18 @@ pub enum Stmt {
         value: Box<Span<Expr>>,
     },
 
+    Mut {
+        name: String,
+        ty: Ty,
+        value: Box<Span<Expr>>,
+    },
+
+    /// An assignment statement: name = expr
+    Assign {
+        name: String,
+        value: Box<Span<Expr>>,
+    },
+
     For {
         name: String,
         iterable: Box<Span<Expr>>,

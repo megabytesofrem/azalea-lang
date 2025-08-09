@@ -4,12 +4,12 @@ use super::Parser;
 use super::base as parser;
 use super::error::ParserError;
 use crate::ast::Block;
-use crate::ast::Stmt;
 use crate::ast::ast_types::Enum;
 use crate::ast::ast_types::Function;
 use crate::ast::ast_types::Record;
 use crate::ast::ast_types::Ty;
-use crate::lexer::TokenKind;
+use crate::ast::{Expr, Stmt};
+use crate::lexer::{SourceLoc, TokenKind};
 use crate::parse::span::Span;
 use crate::parse::span::spanned;
 
@@ -29,6 +29,7 @@ impl<'a> Parser<'a> {
 
         match self.peek().map(|t| t.kind) {
             Some(TokenKind::KwLet) => self.parse_let(),
+            Some(TokenKind::KwMut) => self.parse_mut(),
             Some(TokenKind::KwIf) => self.parse_if().map(|expr| {
                 // Wrap the expression in a statement
                 spanned(Stmt::Expr(expr), location)
@@ -41,9 +42,40 @@ impl<'a> Parser<'a> {
             Some(TokenKind::KwEnum) => self.parse_enum_decl(),
             Some(TokenKind::KwFn) => self.parse_fn_decl(),
             Some(TokenKind::Name) => {
-                // This handles expressions that start with a name
-                // We don't consume the name here, let parse_expr handle it
-                Ok(spanned(Stmt::Expr(self.parse_expr()?), location))
+                // Look ahead to see if this is an assignment (name = expr)
+                // We'll save the current state and try parsing as assignment first
+                let name_token = self.next().unwrap(); // consume the name
+
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Eq) {
+                    // This is an assignment: name = expr
+                    self.next(); // consume the =
+                    let value = self.parse_expr()?;
+
+                    Ok(spanned(
+                        Stmt::Assign {
+                            name: name_token.literal.to_string(),
+                            value: Box::new(value),
+                        },
+                        location,
+                    ))
+                } else {
+                    // This is an expression statement starting with a name
+                    // We need to "put back" the name token and parse the whole expression
+                    // Since we can't put back tokens, we'll create an Ident expression
+                    // and manually continue parsing the postfix operations
+
+                    // Start with the identifier
+                    let mut expr = spanned(
+                        Expr::Ident(name_token.literal.to_string()),
+                        name_token.location.clone(),
+                    );
+
+                    // Parse any postfix operations (function calls, member access, etc.)
+                    // We need to simulate what parse_expr would do
+                    expr = self.parse_remaining_expr(expr)?;
+
+                    Ok(spanned(Stmt::Expr(expr), location))
+                }
             }
             _ => Err(ParserError::UnexpectedToken {
                 token: self.peek().map(|t| t.kind).unwrap(),
@@ -110,6 +142,39 @@ impl<'a> Parser<'a> {
 
         Ok(spanned(
             Stmt::Let {
+                name: name.to_string(),
+                ty,
+                value: Box::new(value),
+            },
+            location,
+        ))
+    }
+
+    fn parse_mut(&mut self) -> Result<Span<Stmt>, ParserError> {
+        // mut name: ty = expr or mut name = expr
+        let location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        self.expect(TokenKind::KwMut)?;
+        let name = self.expect(TokenKind::Name)?.literal;
+
+        let ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
+            println!("Parsing type annotation in let statement");
+            self.next();
+            let ty = self.parse_typename()?;
+            self.expect(TokenKind::Eq)?;
+            // println!("Finished parsing type annotation, about to parse expression");
+
+            ty
+        } else {
+            println!("No type annotation found, using UnknownForNow");
+            self.expect(TokenKind::Eq)?;
+            Ty::Unresolved
+        };
+
+        let value = self.parse_expr()?;
+
+        Ok(spanned(
+            Stmt::Mut {
                 name: name.to_string(),
                 ty,
                 value: Box::new(value),
@@ -261,5 +326,34 @@ impl<'a> Parser<'a> {
         };
 
         Ok(spanned(Stmt::FnDecl(func), location))
+    }
+
+    fn parse_remaining_expr(&mut self, mut lhs: Span<Expr>) -> parser::Return<Span<Expr>> {
+        // First, handle any postfix operations (function calls, member access, etc.)
+        // Use the existing parse_postfix method from expr.rs
+        lhs = self.parse_postfix(lhs)?;
+
+        // Then handle binary operators with precedence
+        while let Some(op_token) = self.peek().clone() {
+            // Check if the current token is actually a binary operator
+            if !op_token.kind.is_binary_operator() {
+                break;
+            }
+
+            let op = op_token.kind.clone().to_operator();
+            let (prec, assoc) = self.get_precedence(op);
+
+            self.next(); // consume the operator
+            let rhs = self.parse_expr_prec(if assoc == super::Assoc::Left {
+                prec + 1
+            } else {
+                prec
+            })?;
+
+            let location = lhs.loc.clone();
+            lhs = spanned(Expr::BinOp(Box::new(lhs), op, Box::new(rhs)), location);
+        }
+
+        Ok(lhs)
     }
 }

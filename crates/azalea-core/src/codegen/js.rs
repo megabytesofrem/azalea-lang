@@ -241,8 +241,19 @@ impl Emit for JSCodegen {
             Stmt::Expr(expr) => self.visit_expr(&expr.target),
             Stmt::Let { name, ty: _, value } => {
                 let value_emit = self.visit_expr(&value.target);
-                format!("let {} = {};", name, value_emit)
+                format!("const {} = {};", name, value_emit)
             }
+
+            Stmt::Mut { name, ty: _, value } => {
+                let value_emit = self.visit_expr(&value.target);
+                format!("let /*MUT*/ {} = {};", name, value_emit)
+            }
+
+            Stmt::Assign { name, value } => {
+                let value_emit = self.visit_expr(&value.target);
+                format!("{} = {};", name, value_emit)
+            }
+
             Stmt::RecordDecl(record) => {
                 // FIXME: This should use the default value of the field type, need to get this
 

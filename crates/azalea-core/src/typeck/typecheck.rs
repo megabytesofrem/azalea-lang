@@ -295,6 +295,53 @@ impl Typechecker {
 
             Expr::Lam { .. } => self.infer_lam(&expr, env, location.clone()),
 
+            Expr::MemberAccess(member) => {
+                // For member access, we need to resolve the type of the target expression
+                let target_ty =
+                    self.infer_type(env, &member.target.target, member.target.loc.clone())?;
+
+                // Check if the target type is a record or an enum
+                match target_ty {
+                    Ty::Record(record) => {
+                        // Find the field type in the record
+                        if let Some(field_ty) = record.fields.iter().find_map(|(name, ty)| {
+                            if name == &member.name {
+                                Some(ty.clone())
+                            } else {
+                                None
+                            }
+                        }) {
+                            Ok(field_ty)
+                        } else {
+                            Err(SemanticError::UndefinedFieldOrVariant {
+                                field: member.name.clone(),
+                                structure: record.name.clone(),
+                                location: member.target.loc.clone(),
+                            })
+                        }
+                    }
+                    Ty::Enum(enum_ty) => {
+                        // For enums, we need to check if the field is a variant
+                        if enum_ty.variants.contains(&member.name) {
+                            Ok(enum_ty.to_type())
+                        } else {
+                            Err(SemanticError::UndefinedFieldOrVariant {
+                                field: member.name.clone(),
+                                structure: enum_ty.name.clone(),
+                                location: member.target.loc.clone(),
+                            })
+                        }
+                    }
+
+                    // TODO: Change to expected one of many
+                    _ => Err(SemanticError::TypeMismatch {
+                        expected: Ty::Any,
+                        found: target_ty,
+                        location: member.target.loc.clone(),
+                    }),
+                }
+            }
+
             _ => todo!("Type inference for expression: {:?}", expr),
         }
     }
@@ -429,6 +476,32 @@ impl Typechecker {
                 self.resolver
                     .define_or_redefine_variable(name.clone(), ty.clone());
                 env.insert(name.clone(), ty.clone());
+                Ok(())
+            }
+
+            Stmt::Mut { name, ty, value } => {
+                let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
+                let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
+                env.extend(local_subst);
+
+                // Add the variable to both the resolver (for scope management) and typing environment (for type tracking)
+                self.resolver
+                    .define_or_redefine_variable(name.clone(), ty.clone());
+                env.insert(name.clone(), ty.clone());
+                Ok(())
+            }
+
+            Stmt::Assign { name, value } => {
+                // For assignment statements, we need to check that the variable exists
+                // and that the value type matches the variable type
+                let var_ty = env
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
+
+                let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
+                self.unify(&var_ty, &value_ty, value.loc.clone())?;
+
                 Ok(())
             }
 

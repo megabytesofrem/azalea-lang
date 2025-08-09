@@ -117,7 +117,7 @@ impl<'a> Parser<'a> {
     }
 
     // Postfix operator parsing, lifted from another older project of mine
-    fn parse_postfix(&mut self, base_expr: Span<Expr>) -> parser::Return<Span<Expr>> {
+    pub(crate) fn parse_postfix(&mut self, base_expr: Span<Expr>) -> parser::Return<Span<Expr>> {
         if let Some(next_token) = self.peek() {
             match next_token.kind {
                 TokenKind::Dot => {
@@ -360,7 +360,6 @@ impl<'a> Parser<'a> {
         // Else is required for expression-style if
         self.expect(TokenKind::KwElse)?;
         let else_expr = self.parse_expr()?;
-        self.expect(TokenKind::KwEnd)?;
 
         Ok(spanned(
             Expr::If {

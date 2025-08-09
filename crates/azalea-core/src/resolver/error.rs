@@ -21,6 +21,12 @@ pub enum SemanticError {
     ExpectedLambda {
         location: SourceLoc,
     },
+
+    UndefinedFieldOrVariant {
+        field: String,
+        structure: String,
+        location: SourceLoc,
+    },
 }
 
 impl SemanticError {
@@ -76,6 +82,16 @@ impl SemanticError {
                 location.clone(),
             )
             .with_hint("Expected a lambda in the format of: \\(params) -> expr".to_string()),
+
+            SemanticError::UndefinedFieldOrVariant {
+                field,
+                structure,
+                location,
+            } => ErrorReport::new(
+                format!("Undefined field or variant: {} in {}", field, structure),
+                "Semantic error".to_string(),
+                location.clone(),
+            ),
         }
     }
 }

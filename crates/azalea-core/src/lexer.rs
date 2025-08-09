@@ -194,8 +194,8 @@ pub enum TokenKind {
     // Keywords
     #[token("pub")]
     KwPub,
-    #[token("const")]
-    KwConst,
+    #[token("mut")]
+    KwMut,
     #[token("class")]
     KwClass,
     #[token("impl")]
