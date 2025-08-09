@@ -16,15 +16,6 @@ let me: Person = .{
   gender: Gender.female
 }
 
-fn get_name(self: Person): String = self.name
-fn is_girl(self: Person): String = 
-  if self.gender == Gender.female 
-    then "Yes"
-    else "No"
-
-fn main(): Unit = do
-  let name: String = get_name(me)
-  let is_girl: Bool = is_girl(me)
-  println("Name: " ++ name)
-  println("Is girl: " ++ is_girl)
-end
+let my_name: String = me.name
+let fav_number: Int = 42
+let pi: Float = 3.14159

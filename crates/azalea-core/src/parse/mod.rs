@@ -4,6 +4,8 @@ pub mod expr;
 pub mod misc;
 pub mod span;
 pub mod stmt;
+pub mod type_;
+pub mod typeclass;
 
 #[cfg(test)]
 pub mod tests;

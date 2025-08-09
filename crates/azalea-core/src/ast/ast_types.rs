@@ -31,6 +31,11 @@ pub enum Ty {
     /// - `String` ❌
     TypeCons(String, Vec<Ty>),
 
+    /// A type constrained by a type class.
+    /// An example of a constraint is `Num[A]`, which means that `A` must be a numeric type.
+    /// This is used to represent type classes in the type system.
+    Constraint(String, Vec<Ty>),
+
     /// Maps directly to JavaScript arrays
     Array(Box<Ty>),
 

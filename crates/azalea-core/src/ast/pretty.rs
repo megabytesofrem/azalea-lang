@@ -93,6 +93,8 @@ impl Pretty for Ty {
                 let vars_str: Vec<String> = vars.iter().map(|v| v.to_string()).collect();
                 format!("∀{}. {}", vars_str.join(", "), ty.pretty())
             }
+
+            _ => todo!("Not implemented"),
         }
     }
 

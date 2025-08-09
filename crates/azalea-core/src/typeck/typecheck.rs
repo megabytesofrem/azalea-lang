@@ -268,9 +268,34 @@ impl Typechecker {
                 Ok(Ty::Unresolved)
             }
 
+            Expr::If { cond, then, else_ } => {
+                // Infer the condition type
+                let cond_ty = self.infer_type(env, &cond.target, cond.loc.clone())?;
+                self.unify(&cond_ty, &Ty::Bool, cond.loc.clone())?;
+
+                // Infer the types of both branches
+                let then_ty = self.infer_block(then, env, location.clone())?;
+
+                if let Some(else_) = else_ {
+                    // If there's an else branch, infer its type as well
+                    let else_ty = self.infer_block(else_, env, location.clone())?;
+
+                    // Unify the types of both branches
+                    self.unify(&then_ty, &else_ty, location.clone())?;
+                } else {
+                    // If there's no else branch, we can assume the type is Unit
+                    let else_ty = Ty::Unit;
+
+                    // Unify the types of both branches
+                    self.unify(&then_ty, &else_ty, location.clone())?;
+                }
+
+                Ok(then_ty)
+            }
+
             Expr::Lam { .. } => self.infer_lam(&expr, env, location.clone()),
 
-            _ => todo!(),
+            _ => todo!("Type inference for expression: {:?}", expr),
         }
     }
 

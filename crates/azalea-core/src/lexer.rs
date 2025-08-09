@@ -196,6 +196,10 @@ pub enum TokenKind {
     KwPub,
     #[token("const")]
     KwConst,
+    #[token("class")]
+    KwClass,
+    #[token("impl")]
+    KwImpl,
     #[token("where")]
     KwWhere,
     #[token("let")]
@@ -231,6 +235,7 @@ pub enum TokenKind {
     #[token("false")]
     KwFalse,
 
+    // TODO: Refactor to use a single case for types and identifiers?
     #[regex(r"Int|Float|String|Bool|Unit", |lex| lex.slice().to_owned())]
     KwType(String),
 

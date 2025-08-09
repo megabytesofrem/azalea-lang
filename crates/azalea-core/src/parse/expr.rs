@@ -179,7 +179,7 @@ impl<'a> Parser<'a> {
 
                 TokenKind::LParen => {
                     // Function call: Parse the function call, and recurse to parse postfix operators
-                    let fncall = self.parse_fncall()?;
+                    let fncall = self.parse_fncall(base_expr)?;
                     self.parse_postfix(fncall)
                 }
 
@@ -311,7 +311,10 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_if(&mut self) -> parser::Return<Span<Expr>> {
+    pub(crate) fn parse_if(&mut self) -> parser::Return<Span<Expr>> {
+        // FIXME: This only handles single expressions in the then and else blocks.
+        // We should handle blocks of statements in the future.
+
         // if condition then [block] else [block] end
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
@@ -350,11 +353,10 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_fncall(&mut self) -> parser::Return<Span<Expr>> {
-        // f(x, y)
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+    fn parse_fncall(&mut self, target: Span<Expr>) -> parser::Return<Span<Expr>> {
+        // f(x, y) - target is already parsed
+        let location = target.loc.clone();
 
-        let target = self.parse_main_expr()?;
         self.expect(TokenKind::LParen)?;
 
         let mut args = Vec::new();

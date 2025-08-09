@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::error::ParserError;
 use crate::ast::Stmt;
-use crate::lexer::{self, LexerIter, LexicalError, Op, SourceLoc, Token, TokenKind};
+use crate::lexer::{self, LexerIter, Op, Token, TokenKind};
 use crate::parse::{base, span::Span};
 
 /// Associativity
@@ -29,6 +29,7 @@ pub struct Parser<'a> {
 
 pub type Return<'a, T> = Result<T, ParserError>;
 
+#[allow(dead_code)]
 impl<'a> Parser<'a> {
     pub fn new(token_stream: LexerIter<'a>) -> Self {
         // Get the location of the first token in the stream

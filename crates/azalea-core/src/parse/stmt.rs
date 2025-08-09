@@ -1,3 +1,5 @@
+//! Statement and block parsers
+
 use super::Parser;
 use super::base as parser;
 use super::error::ParserError;
@@ -27,18 +29,21 @@ impl<'a> Parser<'a> {
 
         match self.peek().map(|t| t.kind) {
             Some(TokenKind::KwLet) => self.parse_let(),
+            Some(TokenKind::KwIf) => self.parse_if().map(|expr| {
+                // Wrap the expression in a statement
+                spanned(Stmt::Expr(expr), location)
+            }),
             Some(TokenKind::KwFor) => self.parse_for(),
+            Some(TokenKind::KwClass) => self.parse_typeclass_decl(),
+            Some(TokenKind::KwImpl) => self.parse_typeclass_instance(),
             Some(TokenKind::KwWhile) => self.parse_while(),
             Some(TokenKind::KwRecord) => self.parse_record_decl(),
             Some(TokenKind::KwEnum) => self.parse_enum_decl(),
             Some(TokenKind::KwFn) => self.parse_fn_decl(),
             Some(TokenKind::Name) => {
-                let name = self.expect(TokenKind::Name)?.literal;
-                if self.peek().map(|t| t.kind) == Some(TokenKind::Eq) {
-                    self.parse_let()
-                } else {
-                    Ok(spanned(Stmt::Expr(self.parse_expr()?), location))
-                }
+                // This handles expressions that start with a name
+                // We don't consume the name here, let parse_expr handle it
+                Ok(spanned(Stmt::Expr(self.parse_expr()?), location))
             }
             _ => Err(ParserError::UnexpectedToken {
                 token: self.peek().map(|t| t.kind).unwrap(),
@@ -97,7 +102,7 @@ impl<'a> Parser<'a> {
             ty
         } else {
             println!("No type annotation found, using UnknownForNow");
-            self.next();
+            self.expect(TokenKind::Eq)?;
             Ty::Unresolved
         };
 
@@ -243,21 +248,17 @@ impl<'a> Parser<'a> {
         };
 
         self.expect(TokenKind::Eq)?;
-        let mut body: Vec<Span<Stmt>> = Vec::new();
 
         // Check if the next token is `do`, and if so parse the block. Otherwise
-        // we have a single expression and need to wrap that in a `Stmt::Expr` node.
-        if self.peek().map(|t| t.kind) == Some(TokenKind::KwDo) {
+        // we have a single expression function.
+        let func = if self.peek().map(|t| t.kind) == Some(TokenKind::KwDo) {
             let block = self.parse_block()?;
-            body.extend(block);
+            Function::new_with_stmts(name.to_string(), args, return_ty, block)
         } else {
-            // Single expressions implicitly return their value to the function
+            // Single expression function - use body_expr
             let expr = self.parse_expr()?;
-
-            body.push(spanned(Stmt::Expr(expr), location.clone()));
-        }
-
-        let func = Function::new_with_stmts(name.to_string(), args, return_ty, body);
+            Function::new_with_expr(name.to_string(), args, return_ty, Box::new(expr))
+        };
 
         Ok(spanned(Stmt::FnDecl(func), location))
     }
