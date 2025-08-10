@@ -109,34 +109,6 @@ fn can_unify_arrays() {
 }
 
 #[test]
-fn can_unify_records() {
-    assert_unify!(
-        Ty::Record(Box::new(Record {
-            name: "a".to_string(),
-            fields: vec![],
-        })),
-        Ty::Record(Box::new(Record {
-            name: "b".to_string(),
-            fields: vec![],
-        }))
-    );
-}
-
-#[test]
-fn cannot_unify_records_with_different_fields() {
-    assert_unify!(
-        Ty::Record(Box::new(Record {
-            name: "Person".to_string(),
-            fields: vec![("age".to_string(), Ty::Int)],
-        })),
-        Ty::Record(Box::new(Record {
-            name: "Person".to_string(),
-            fields: vec![("name".to_string(), Ty::String)],
-        }))
-    );
-}
-
-#[test]
 fn infer_most_general_types() {
     let mut tc = Typechecker::new();
     let mut env = TypingEnv::new();

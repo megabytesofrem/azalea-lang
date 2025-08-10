@@ -22,11 +22,7 @@ impl Typechecker {
                 vars.extend(self.find_free_type_vars(&func.return_ty));
                 vars
             }
-            Ty::Record(record) => record
-                .fields
-                .iter()
-                .flat_map(|(_, ty)| self.find_free_type_vars(ty))
-                .collect(),
+
             Ty::TypeCons(_, type_params) => type_params
                 .iter()
                 .flat_map(|ty| self.find_free_type_vars(ty))
@@ -104,6 +100,37 @@ impl Typechecker {
 
             // For all other types, we simply return the type as is
             _ => ty.clone(),
+        }
+    }
+
+    pub fn collect_type_params(&self, ty: &Ty, type_params: &mut HashSet<String>) {
+        match ty {
+            Ty::TypeCons(name, args) if args.is_empty() => {
+                // This is likely a type parameter if:
+                // 1. It has no arguments
+                // 2. It's not a known record/enum
+                // 3. It starts with uppercase (convention)
+                if !self.type_registry.is_record_defined(name)
+                    && name.chars().next().map_or(false, |c| c.is_uppercase())
+                {
+                    type_params.insert(name.clone());
+                }
+            }
+            Ty::TypeCons(_, args) => {
+                for arg in args {
+                    self.collect_type_params(arg, type_params);
+                }
+            }
+            Ty::Array(inner) => {
+                self.collect_type_params(inner, type_params);
+            }
+            Ty::Fn(func) => {
+                for (_, arg_ty) in &func.args {
+                    self.collect_type_params(arg_ty, type_params);
+                }
+                self.collect_type_params(&func.return_ty, type_params);
+            }
+            _ => {}
         }
     }
 
@@ -199,23 +226,16 @@ impl Typechecker {
                 }
             }
 
-            // If the type is a record, apply the substitution to the fields
-            Ty::Record(record) => {
-                let fields = record
-                    .fields
+            // Handle type constructors with parameters, including records and enums
+            // since they are represented nominally as type constructors.
+            Ty::TypeCons(name, params) => {
+                let hydrated_params: Vec<Ty> = params
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.hydrate_type(subst, &ty)))
+                    .map(|param| self.hydrate_type(subst, param))
                     .collect();
 
-                Ty::Record(Box::new(Record {
-                    name: record.name.clone(),
-                    fields,
-                }))
+                Ty::TypeCons(name.clone(), hydrated_params)
             }
-
-            // See above: Enums currently cannot have user-defined types, so we can
-            // logically conclude that they can never be infinite types.
-            Ty::Enum(_) => ty.clone(),
 
             // All other types are concrete - leave them alone
             _ => ty.clone(),

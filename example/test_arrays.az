@@ -1,5 +1,6 @@
 let arr: Array[Int] = [1, 2, 3]
+
+-- Array indexing is done using .[index] to avoid confusion with generics
 let first: Int = arr.[0]
 let last: Int = arr.[2]
-
 let second: Int = arr.[1]

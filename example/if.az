@@ -1,4 +1,21 @@
+-- Ternary like if expression
 fn ternary_like(x: Int): Int = 
   if x == 5 
     then 1
     else 0
+
+-- Dummy function just to get the typechecker to shutup until we have a standard library
+-- or some way to export JS functions.
+fn log(a: Any): Any = do
+  let x: Int = 5
+end
+
+-- Block if expression, familiar to Javascript programmers
+fn block_if(x: Int): Int = do
+  if x == 5 
+    then do
+      log("x is 5")
+    else do
+      log("x is not 5")
+  end
+end

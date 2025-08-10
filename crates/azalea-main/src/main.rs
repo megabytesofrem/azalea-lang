@@ -11,32 +11,23 @@ fn main() {
     let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
     let tokens = lex_tokens(&src);
 
-    // Debug: print all tokens
-    println!("All tokens:");
-    // for (i, lex_result) in tokens.clone().enumerate() {
-    //     match lex_result {
-    //         Ok(token) => {
-    //             println!(
-    //                 "{}: {:?} at {:?} = '{}'",
-    //                 i, token.kind, token.location, token.literal
-    //             );
-    //         }
-    //         Err(lex_error) => {
-    //             println!("{}: Lexical Error: {:?}", i, lex_error);
-    //         }
-    //     }
-    // }
-    println!("\nParsing...\n");
+    println!("Parsing source...\n");
 
     let parse = Parser::parse(tokens).unwrap();
     // println!("AST: {:#?}", parse.ast);
-    println!("Errors: {:#?}", parse.errors());
+
+    for error in parse.errors() {
+        eprintln!("{}", error.report().show_pretty_message());
+    }
 
     // Type check the AST
     let mut typeck = Typechecker::new();
     let typeck_result = typeck.walk_ast(parse.ast.clone());
 
-    println!("Typecheck Result: {:#?}", typeck_result);
+    if let Err(err) = typeck_result {
+        eprintln!("Type checking failed: {:?}", err);
+        return;
+    }
 
     // Codegen time!
     let mut js = JSCodegen::new();

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, vec};
 
-use crate::ast::ast_types::Ty;
+use crate::ast::ast_types::{Record, Ty};
 use crate::{resolver::Return, resolver::error::SemanticError};
 
 #[derive(Debug, Clone)]

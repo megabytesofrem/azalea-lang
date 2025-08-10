@@ -42,10 +42,6 @@ pub enum Ty {
     /// Allows us to pass functions around as values
     Fn(Box<Function>),
 
-    /// Record and enum types
-    Record(Box<Record>),
-    Enum(Box<Enum>),
-
     /// A universally quantified polymorphic type, e.g. `forall a. a -> a`
     ForAll(Vec<String>, Box<Ty>),
 }
@@ -60,8 +56,6 @@ impl PartialEq for Ty {
             (Ty::TypeCons(a, _), Ty::TypeCons(b, _)) => a == b,
             (Ty::Array(a), Ty::Array(b)) => a == b,
             (Ty::Fn(a), Ty::Fn(b)) => a == b,
-            (Ty::Record(a), Ty::Record(b)) => a == b,
-            (Ty::Enum(a), Ty::Enum(b)) => a == b,
 
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
@@ -115,13 +109,19 @@ pub struct RecordExpr {
 
 impl Record {
     pub fn to_type(&self) -> Ty {
-        Ty::Record(Box::new(self.clone()))
+        Ty::TypeCons(
+            self.name.clone(),
+            self.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+        )
     }
 }
 
 impl Enum {
     pub fn to_type(&self) -> Ty {
-        Ty::Enum(Box::new(self.clone()))
+        Ty::TypeCons(
+            self.name.clone(),
+            self.variants.iter().map(|_| Ty::Int).collect(),
+        )
     }
 }
 

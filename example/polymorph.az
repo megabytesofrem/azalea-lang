@@ -1,9 +1,18 @@
-record Container ={
-  value: A,
+-- This file demonstrates polymorphism in Azalea.
+
+record Container = {
+  value: A
 }
 
 
-fn new_container[Int](x: Int): Container = Container {
+-- This is bad and should not type check since A could be anything, 
+-- but our function always put a string into the container which breaks type safety.
+-- fn bad[A](x: String): Container[A] = Container {
+--   value: x
+-- }
+
+-- Good version that uses polymorphism correctly.
+fn good[A](x: A): Container[A] = Container {
   value: x
 }
 

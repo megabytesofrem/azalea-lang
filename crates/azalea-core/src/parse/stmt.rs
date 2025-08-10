@@ -16,6 +16,11 @@ use crate::parse::type_;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_stmt(&mut self) -> parser::Return<Span<Stmt>> {
+        // Skip any comments
+        while self.peek().map(|t| t.kind) == Some(TokenKind::Comment) {
+            self.next(); // consume the comment token
+        }
+
         let expected_tokens = vec![
             TokenKind::KwLet,
             TokenKind::KwFor,

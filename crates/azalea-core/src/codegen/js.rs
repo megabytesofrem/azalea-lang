@@ -72,20 +72,6 @@ fn default_js_value(ty: &Ty) -> String {
                 "{}".to_string()
             }
         }
-        Ty::Record(record) => {
-            // For records, we can return an empty record with the fields initialized to their defaults
-            let fields: Vec<String> = record
-                .fields
-                .iter()
-                .map(|(name, ty)| format!("{}: {}", name, default_js_value(ty)))
-                .collect();
-            format!("{{ {} }}", fields.join(", "))
-        }
-        Ty::Enum(_) => {
-            // TODO: Serialize enums to JS objects or something alike
-            // For now, we can just return an empty object
-            "/* ENUM */ {}".to_string()
-        }
 
         Ty::ForAll(_, _) => {
             // For polymorphic types, we cannot generate a default value

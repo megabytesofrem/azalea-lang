@@ -73,20 +73,6 @@ impl Pretty for Ty {
                 let return_ty_str = func.return_ty.pretty();
                 format!("fn({}) -> {}", args_str.join(", "), return_ty_str)
             }
-            Ty::Record(record) => {
-                let fields_str: Vec<String> = record
-                    .fields
-                    .iter()
-                    .map(|(name, ty)| format!("{}: {}", name, ty.pretty()))
-                    .collect();
-                format!("ʳ{} {{ {} }}", record.name, fields_str.join(", "))
-            }
-            Ty::Enum(enumeration) => {
-                let variants: Vec<String> =
-                    enumeration.variants.iter().map(|v| v.to_string()).collect();
-
-                format!("ᵉ{} {{ {} }}", enumeration.name, variants.join(", "))
-            }
 
             // A universally quantified polymorphic type
             Ty::ForAll(vars, ty) => {
