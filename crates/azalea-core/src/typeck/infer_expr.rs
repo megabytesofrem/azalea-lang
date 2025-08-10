@@ -534,7 +534,11 @@ impl Typechecker {
             .type_params
             .iter()
             .enumerate()
-            .filter_map(|(i, param_name)| type_params.get(i).map(|ty| (param_name.clone(), ty.clone())))
+            .filter_map(|(i, param_name)| {
+                type_params
+                    .get(i)
+                    .map(|ty| (param_name.clone(), ty.clone()))
+            })
             .collect()
     }
 

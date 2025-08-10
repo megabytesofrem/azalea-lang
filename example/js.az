@@ -1,9 +1,9 @@
 -- Extern functions
-extern console_log(s: String)
-extern math_random(): Float
-extern math_abs(x: Float): Float
-extern math_sqrt(x: Float): Float
-extern to_string(x: Any): String
+extern "console.log" console_log(s: String)
+extern "Math.sqrt" math_sqrt(x: Float): Float
+extern "Math.abs" math_abs(x: Float): Float
+extern "Math.random" math_random(): Float
+
 
 fn main() = do
   console_log("Hello, Azalea!")

@@ -101,7 +101,9 @@ pub struct Function {
     pub body: Option<Vec<Span<Stmt>>>,
     pub body_expr: Option<Box<Span<Expr>>>, // If this is a lambda expression
 
+    // These fields are only used for extern functions
     pub is_extern: bool,
+    pub extern_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,6 +147,7 @@ impl Function {
             body: None,
             body_expr: None,
             is_extern: false,
+            extern_name: None,
         }
     }
 
@@ -162,6 +165,7 @@ impl Function {
             body: Some(body),
             body_expr: None,
             is_extern: false,
+            extern_name: None,
         }
     }
 
@@ -179,10 +183,16 @@ impl Function {
             body: None,
             body_expr: Some(body_expr),
             is_extern: false,
+            extern_name: None,
         }
     }
 
-    pub fn new_extern(name: String, args: Vec<(String, Ty)>, return_ty: Ty) -> Self {
+    pub fn new_extern(
+        extern_name: String,
+        name: String,
+        args: Vec<(String, Ty)>,
+        return_ty: Ty,
+    ) -> Self {
         Self {
             name,
             args,
@@ -191,6 +201,7 @@ impl Function {
             body: None,
             body_expr: None,
             is_extern: true,
+            extern_name: extern_name.into(),
         }
     }
 }

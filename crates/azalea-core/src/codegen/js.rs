@@ -1,4 +1,4 @@
-use crate::ast::ast_types::Ty;
+use crate::ast::ast_types::{Function, Ty};
 use crate::ast::pretty::Pretty;
 use crate::ast::{Expr, Literal, Stmt};
 use crate::codegen::pp::PrettyPrinter;
@@ -85,6 +85,24 @@ impl JSCodegen {
         }
     }
 
+    fn lookup_function(&self, name: &str) -> Option<Function> {
+        self.ast
+            .iter()
+            .find_map(|stmt| {
+                if let Stmt::FnDecl(func) = &stmt.target {
+                    if func.name == name {
+                        return Some(func);
+                    }
+                } else if let Stmt::ExternDecl(func) = &stmt.target {
+                    if func.name == name {
+                        return Some(func);
+                    }
+                }
+                None
+            })
+            .cloned()
+    }
+
     fn visit_bin_op(&mut self, left: &Expr, op: &Op, right: &Expr) -> String {
         let left_js = self.visit_expr(left);
         let right_js = self.visit_expr(right);
@@ -107,74 +125,48 @@ impl JSCodegen {
 
     fn visit_function_call(&mut self, target: &Expr, args: Vec<Span<Expr>>) -> String {
         if let Expr::Ident(name) = target {
-            // Special case for to_string - convert to method call
+            // Check if the function is an extern function
+            if let Some(func) = self.lookup_function(name) {
+                if func.is_extern {
+                    let extern_name = func
+                        .extern_name
+                        .as_ref()
+                        .expect("Extern function missing extern_name")
+                        .trim_matches('"');
+
+                    let args_emit: Vec<String> = args
+                        .iter()
+                        .map(|arg| self.visit_expr(&arg.target))
+                        .collect();
+
+                    return format!("{}({})", extern_name, args_emit.join(", "));
+                }
+            }
+
+            // Handle special cases like `to_string`
             if name == "to_string" {
                 if args.len() != 1 {
                     panic!("to_string expects exactly one argument");
                 }
-
                 let arg = self.visit_expr(&args.first().unwrap().target);
                 return format!("{}.toString()", arg);
             }
 
-            // Auto-map function names for extern functions
-            let js_name = self.auto_map_function_name(name, args.clone());
+            // Regular function call
             let args_emit: Vec<String> = args
                 .iter()
                 .map(|arg| self.visit_expr(&arg.target))
                 .collect();
-
-            format!("{}({})", js_name, args_emit.join(", "))
+            return format!("{}({})", name, args_emit.join(", "));
         } else {
-            // If the target is not an identifier, we need to visit it as an expression
+            // If the target is not an identifier, visit it as an expression
             let target_js = self.visit_expr(target);
             let args_emit: Vec<String> = args
                 .iter()
                 .map(|arg| self.visit_expr(&arg.target))
                 .collect();
-
             format!("{}({})", target_js, args_emit.join(", "))
         }
-    }
-
-    fn auto_map_function_name(&mut self, name: &str, args: Vec<Span<Expr>>) -> String {
-        // Map function names to their JavaScript equivalents
-        match name {
-            name if name.starts_with("console_") => {
-                let method = &name[8..];
-                format!("console.{}", method)
-            }
-            name if name.starts_with("json_") => {
-                let method = &name[5..];
-                format!("JSON.{}", self.snake_to_camel(method))
-            }
-            name if name.starts_with("math_") => {
-                let method = &name[5..];
-                format!("Math.{}", self.snake_to_camel(method))
-            }
-
-            _ => name.to_string(), // Default case, return the name as is
-        }
-    }
-
-    fn snake_to_camel(&self, name: &str) -> String {
-        let mut result = String::new();
-        let mut capitalize_next = false;
-
-        for c in name.chars() {
-            if c == '_' {
-                capitalize_next = true;
-            } else {
-                if capitalize_next {
-                    result.push(c.to_ascii_uppercase());
-                    capitalize_next = false;
-                } else {
-                    result.push(c);
-                }
-            }
-        }
-
-        result
     }
 
     fn visit_unary_op(&mut self, op: &Op, expr: &Expr) -> String {

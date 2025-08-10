@@ -241,11 +241,9 @@ impl Typechecker {
         };
 
         println!(
-            "DEBUG: Unifying {} ({:?}) with {} ({:?}) => {}",
+            "DEBUG: Unifying {} with {}=> {}",
             t1.pretty(),
-            t1,
             t2.pretty(),
-            t2,
             self.pretty_print_env(&map.clone()?),
         );
 
@@ -298,6 +296,7 @@ impl Typechecker {
                     body: None,
                     body_expr: None,
                     is_extern: true,
+                    extern_name: extern_func.extern_name.clone(),
                 };
 
                 let func_ty = Ty::Fn(Box::new(func));
@@ -519,6 +518,7 @@ impl Typechecker {
                     },
 
                     is_extern: false,
+                    extern_name: func_decl.extern_name.clone(),
                 }));
 
                 // Pop the function scope

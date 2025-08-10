@@ -373,9 +373,8 @@ impl<'a> Parser<'a> {
             self.next();
             self.parse_typename_with_ctx(&type_param_ctx)?
         } else {
-            // If no type is specified, default to `Unit`. `Unit` is a type that represents the absence
-            // of returning a value from a function.
-            Ty::Unit
+            // If no type is specified, we'll figure it out later
+            Ty::Unresolved
         };
 
         self.expect(TokenKind::Eq)?;
@@ -400,10 +399,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_extern_decl(&mut self) -> parser::Return<Span<Stmt>> {
-        // extern name(args: ty, ...) : ty
+        // extern "js_name" name(args: ty, ...) : ty
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwExtern)?;
+
+        let extern_name = self.expect(TokenKind::StringLit)?.literal;
 
         let name = self.expect(TokenKind::Name)?.literal;
 
@@ -432,7 +433,7 @@ impl<'a> Parser<'a> {
             Ty::Unit
         };
 
-        let func = Function::new_extern(name.to_string(), args, return_ty);
+        let func = Function::new_extern(extern_name.to_string(), name.to_string(), args, return_ty);
 
         Ok(spanned(Stmt::ExternDecl(func), location))
     }

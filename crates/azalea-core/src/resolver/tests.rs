@@ -56,7 +56,8 @@ fn define_function(
         return_ty,
         body: None,
         body_expr: None,
-        is_extern: false, // Not an extern function in this test
+        is_extern: false,  // Not an extern function in this test
+        extern_name: None, // No extern name for this test
     }));
 
     resolver.define_function(name.to_string(), function_ty)?;
@@ -190,7 +191,8 @@ fn valid_function_scoping() {
         return_ty: Ty::Unit,
         body: None,
         body_expr: None,
-        is_extern: false, // Not an extern function in this test
+        is_extern: false,  // Not an extern function in this test
+        extern_name: None, // No extern name for this test
     }));
 
     // Define function in global scope
@@ -209,7 +211,8 @@ fn valid_function_scoping() {
         return_ty: Ty::Int,
         body: None,
         body_expr: None,
-        is_extern: false, // Not an extern function in this test
+        is_extern: false,  // Not an extern function in this test
+        extern_name: None, // No extern name for this test
     }));
 
     resolver

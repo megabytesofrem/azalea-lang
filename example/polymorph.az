@@ -1,6 +1,6 @@
 -- This file demonstrates polymorphism in Azalea.
 
-record Container = {
+record Container[A] = {
   value: A
 }
 

@@ -4,7 +4,7 @@ fn ternary_like(x: Int): Int =
     then 1
     else 0
 
-extern console_log(s: String)
+extern "console.log" console_log(s: String)
 
 -- Block if expression, familiar to Javascript programmers
 fn block_if(x: Int): Unit = do

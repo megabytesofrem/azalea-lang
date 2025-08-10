@@ -1,5 +1,9 @@
+extern "console.log" console_log(s: String)
+
 -- Forall quantifier
-fn id[A](x: A): A = x
+fn id(x: A) = x
+fn head(xs: Array[A]) = xs.[0]
+fn snd(xs: Array[A]) = xs.[1]
 
 -- Pair type
 record Pair[A,B] = {
@@ -13,10 +17,15 @@ record Either[A, B] = {
   right: B
 }
 
--- FIX: this should automatically infer the result type
-fn make_pair[A, B](x: A, y: B): Pair[A, B] = Pair { first: x, second: y }
-fn make_left[A, B](x: A): Either[A, B] = Either { left: x }
-fn make_right[A, B](x: B): Either[A, B] = Either { right: x }
+fn main() = do
+  console_log("Hello")
+end
+
+fn make_pair[A, B](x: A, y: B) = Pair { first: x, second: y }
+fn make_left[A, B](x: A) = Either { left: x }
+fn make_right[A, B](x: B) = Either { right: x }
+
+
 
 -- Testing it out
 let pair1: Pair[Int, String] = make_pair(1, "hello")
