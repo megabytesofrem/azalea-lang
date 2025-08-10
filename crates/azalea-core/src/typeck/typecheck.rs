@@ -241,10 +241,12 @@ impl Typechecker {
         };
 
         println!(
-            "DEBUG: Unifying {} with {} => {}",
+            "DEBUG: Unifying {} ({:?}) with {} ({:?}) => {}",
             t1.pretty(),
+            t1,
             t2.pretty(),
-            self.pretty_print_env(&map.clone()?)
+            t2,
+            self.pretty_print_env(&map.clone()?),
         );
 
         map
@@ -311,7 +313,14 @@ impl Typechecker {
             }
 
             Stmt::Let { name, ty, value } => {
-                let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
+                let value_ty = match &value.target {
+                    Expr::Record(record) => {
+                        // If the value is a record, we need to check that it matches the type
+                        self.check_record_against_expected_type(record, &ty, env, location)?
+                    }
+
+                    _ => self.infer_type(env, &value.target, value.loc.clone())?,
+                };
                 let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
 
                 env.extend(local_subst);
@@ -417,6 +426,7 @@ impl Typechecker {
 
                 let record_decl = Record {
                     name: record.name.clone(),
+                    type_params: record.type_params.clone(),
                     fields: record.fields.clone(),
                 };
 
@@ -443,9 +453,9 @@ impl Typechecker {
 
                 let mut local_env = env.clone();
 
-                // Add type parameters as fresh type variables to the environment
+                // Add type parameters to the environment as type variables
                 for ty_param in &func_decl.type_params {
-                    let ty_var = Ty::Var(self.fresh());
+                    let ty_var = Ty::Var(ty_param.clone());
                     local_env.insert(ty_param.clone(), ty_var);
                 }
 
@@ -488,7 +498,7 @@ impl Typechecker {
                 let args: Vec<(String, Ty)> = func_decl
                     .args
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.hydrate_type(&local_env, ty)))
+                    .map(|(name, ty)| (name.clone(), self.hydrate_type(ty, &local_env)))
                     .collect();
 
                 // Add the function to the environment

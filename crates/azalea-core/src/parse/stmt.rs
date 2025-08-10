@@ -1,5 +1,7 @@
 //! Statement and block parsers
 
+use std::collections::HashSet;
+
 use super::Parser;
 use super::base as parser;
 use super::error::ParserError;
@@ -235,10 +237,28 @@ impl<'a> Parser<'a> {
 
     fn parse_record_decl(&mut self) -> parser::Return<Span<Stmt>> {
         // record name = { field: ty, ... }
+        // record name[A] = { field: ty, ... }
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwRecord)?;
         let name = self.expect(TokenKind::Name)?.literal;
+
+        // Parse type parameters if there are any
+        let mut type_params = Vec::new();
+        if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
+            self.next(); // consume '['
+            while let Some(TokenKind::Name) = self.peek().map(|t| t.kind) {
+                type_params.push(self.expect(TokenKind::Name)?.literal.to_string());
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                    self.next();
+                } else {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RSquare)?;
+        }
+
+        let type_param_ctx: HashSet<String> = type_params.iter().cloned().collect();
 
         self.expect(TokenKind::Eq)?;
 
@@ -246,8 +266,11 @@ impl<'a> Parser<'a> {
         let mut record_fields = Vec::new();
 
         while self.peek().map(|t| t.kind) != Some(TokenKind::RBrace) {
-            let typed_field = self.parse_typed_pair()?;
-            record_fields.push(typed_field);
+            let field_name = self.expect(TokenKind::Name)?.literal;
+            self.expect(TokenKind::Colon)?;
+            let field_ty = self.parse_typename_with_ctx(&type_param_ctx)?;
+
+            record_fields.push((field_name.to_string(), field_ty));
 
             if self.peek().map(|t| t.kind) != Some(TokenKind::Comma) {
                 break;
@@ -260,6 +283,7 @@ impl<'a> Parser<'a> {
         Ok(spanned(
             Stmt::RecordDecl(Record {
                 name: name.to_string(),
+                type_params,
                 fields: record_fields,
             }),
             location,
@@ -301,7 +325,6 @@ impl<'a> Parser<'a> {
 
     fn parse_fn_decl(&mut self) -> parser::Return<Span<Stmt>> {
         // fn name(args: ty, ...) -> ty =
-        #[allow(unused_assignments)]
         // With generics: fn name[T, U](args: ty, ...) -> ty =
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
@@ -311,6 +334,8 @@ impl<'a> Parser<'a> {
         let mut type_params = Vec::new();
         println!("Peek token: {:?}", self.peek());
 
+        // Parse type parameters if there are any
+        // Type parameters are enclosed in square brackets, e.g. `fn name[T, U]`
         if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
             self.next(); // consume '['
             while let Some(TokenKind::Name) = self.peek().map(|t| t.kind) {
@@ -324,25 +349,29 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::RSquare)?;
         }
 
+        let type_param_ctx: HashSet<String> = type_params.iter().cloned().collect();
+
         self.expect(TokenKind::LParen)?;
-        let args = self.parse_typed_pair_list()?;
+
+        // Parse function arguments
+        let mut args = Vec::new();
+        while self.peek().map(|t| t.kind) != Some(TokenKind::RParen) {
+            let name = self.expect(TokenKind::Name)?.literal.to_string();
+            self.expect(TokenKind::Colon)?;
+            let ty = self.parse_typename_with_ctx(&type_param_ctx)?;
+            args.push((name, ty));
+
+            if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                self.next(); // consume the comma
+            } else {
+                break;
+            }
+        }
         self.expect(TokenKind::RParen)?;
-
-        // Check if there are any generics/type parameters
-
-        // if let Some(TokenKind::LSquare) = self.peek().map(|t| t.kind) {
-        //     //type_params = self.parse_type_params()?;
-        // } else {
-        //     // No type parameters, use an empty vector
-        //     return Ok(spanned(
-        //         Stmt::FnDecl(Function::new_with_empty(name.to_string(), args, Ty::Unit)),
-        //         location,
-        //     ));
-        // }
 
         let return_ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
             self.next();
-            self.parse_typename()?
+            self.parse_typename_with_ctx(&type_param_ctx)?
         } else {
             // If no type is specified, default to `Unit`. `Unit` is a type that represents the absence
             // of returning a value from a function.

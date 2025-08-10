@@ -72,14 +72,7 @@ fn default_js_value(ty: &Ty) -> String {
                 "{}".to_string()
             }
         }
-
-        Ty::ForAll(_, _) => {
-            // For polymorphic types, we cannot generate a default value
-            // since they are not concrete types.
-            "/* FORALL */ undefined".to_string()
-        }
-
-        _ => panic!("Unsupported type for default value: {:?}", ty),
+        _ => "undefined".to_string(), // Fallback for unsupported types
     }
 }
 

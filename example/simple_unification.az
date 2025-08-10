@@ -1,5 +1,24 @@
 -- Forall quantifier
 fn id[A](x: A): A = x
 
-let t1: Int = id(123)
-let t2: String = id("hello")
+-- Pair type
+record Pair[A,B] = {
+  first: A,
+  second: B
+}
+
+-- Either type, lifted from Haskell
+record Either[A, B] = {
+  left: A,
+  right: B
+}
+
+-- FIX: this should automatically infer the result type
+fn make_pair[A, B](x: A, y: B): Pair[A, B] = Pair { first: x, second: y }
+fn make_left[A, B](x: A): Either[A, B] = Either { left: x }
+fn make_right[A, B](x: B): Either[A, B] = Either { right: x }
+
+-- Testing it out
+let pair1: Pair[Int, String] = make_pair(1, "hello")
+let left: Either[Int, String] = make_left("Some error message")
+let right: Either[Int, String] = make_right(42)

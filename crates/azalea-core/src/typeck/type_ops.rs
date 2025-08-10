@@ -24,30 +24,13 @@ impl Typechecker {
                 vars
             }
 
-            Ty::TypeCons(name, type_params) => {
-                let mut vars = HashSet::new();
-
-                // This fixes the case where a type constructor has no type parameters.
-                //
-                // Before this, our compiler would return [] since it was only looking at the type parameters
-                // and ignoring the type constructor itself.
-                // For example, `Option` would return [] instead of ["Option"].
-                if type_params.is_empty()
-                    && name.chars().next().map_or(false, |c| c.is_uppercase())
-                    && !self.type_registry.is_record_defined(name)
-                {
-                    // Check if this type constructor represents a type parameter
-                    vars.insert(name.clone());
-                }
-
-                vars.extend(
-                    type_params
-                        .iter()
-                        .flat_map(|ty| self.find_free_type_vars(ty))
-                        .collect::<Vec<_>>(),
-                );
-
-                vars
+            Ty::TypeCons(_name, type_params) => {
+                // TypeCons now represents only actual type constructors like records/enums
+                // Type parameters are represented as Ty::Var instead
+                type_params
+                    .iter()
+                    .flat_map(|ty| self.find_free_type_vars(ty))
+                    .collect::<HashSet<_>>()
             }
 
             // All other types are concrete and have no free variables
@@ -71,7 +54,7 @@ impl Typechecker {
                 }
 
                 // Apply the substitution to the inner type
-                return self.hydrate_type(&subst, inner_ty);
+                return self.hydrate_type(inner_ty, &subst);
             }
 
             Ty::TypeCons(name, ty_params) => {
@@ -130,18 +113,12 @@ impl Typechecker {
 
     pub fn collect_type_params(&self, ty: &Ty, type_params: &mut HashSet<String>) {
         match ty {
-            Ty::TypeCons(name, args) if args.is_empty() => {
-                // This is likely a type parameter if:
-                // 1. It has no arguments
-                // 2. It's not a known record/enum
-                // 3. It starts with uppercase (convention)
-                if !self.type_registry.is_record_defined(name)
-                    && name.chars().next().map_or(false, |c| c.is_uppercase())
-                {
-                    type_params.insert(name.clone());
-                }
+            Ty::Var(name) => {
+                // Type variables represent type parameters
+                type_params.insert(name.clone());
             }
             Ty::TypeCons(_, args) => {
+                // TypeCons represents actual type constructors, recurse into arguments
                 for arg in args {
                     self.collect_type_params(arg, type_params);
                 }
@@ -204,22 +181,22 @@ impl Typechecker {
     ///
     /// This function resolves type variables based on the provided substition map.
     /// If a type variable has no substitution, it remains unchanged.
-    pub fn hydrate_type(&self, subst: &TypingEnv, ty: &Ty) -> Ty {
+    pub fn hydrate_type(&self, ty: &Ty, subst: &TypingEnv) -> Ty {
         match &*ty {
             // If the type is a type level variable, we check if there is a substitution for it
             Ty::Var(var) => subst.get(var).cloned().unwrap_or(Ty::Var(var.to_string())),
 
             // If the type is an array of any type, apply the substitution to the inner type
-            Ty::Array(inner) => Ty::Array(Box::new(self.hydrate_type(subst, &inner))),
+            Ty::Array(inner) => Ty::Array(Box::new(self.hydrate_type(&inner, subst))),
 
             Ty::Fn(func) => {
                 let args: Vec<(String, Ty)> = func
                     .args
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.hydrate_type(subst, &ty)))
+                    .map(|(name, ty)| (name.clone(), self.hydrate_type(&ty, subst)))
                     .collect();
 
-                let return_ty = self.hydrate_type(subst, &func.return_ty);
+                let return_ty = self.hydrate_type(&func.return_ty, subst);
 
                 // Check if the function is a lambda expression or has a body consisting of statements
                 let is_lambda = func.body_expr.is_some() && func.body.is_none();
@@ -248,9 +225,13 @@ impl Typechecker {
             // Handle type constructors with parameters, including records and enums
             // since they are represented nominally as type constructors.
             Ty::TypeCons(name, params) => {
+                if params.is_empty() && subst.contains_key(name) {
+                    return subst[name].clone();
+                }
+
                 let hydrated_params: Vec<Ty> = params
                     .iter()
-                    .map(|param| self.hydrate_type(subst, param))
+                    .map(|param| self.hydrate_type(param, subst))
                     .collect();
 
                 Ty::TypeCons(name.clone(), hydrated_params)

@@ -1,23 +1,32 @@
 //! Parsers for type names and related constructs
 
+use std::collections::HashSet;
+
 use super::Parser;
 use crate::ast::ast_types::{Function, Ty, TypedPair};
 use crate::lexer::{Token, TokenKind};
-use crate::parse::base as parser;
 use crate::parse::error::ParserError;
+use crate::parse::{base as parser, type_};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_typename(&mut self) -> parser::Return<Ty> {
+        self.parse_typename_with_ctx(&HashSet::new())
+    }
+
+    pub fn parse_typename_with_ctx(&mut self, type_params: &HashSet<String>) -> parser::Return<Ty> {
         let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
 
         match token.kind {
-            // Reserved keywords for built-in, primitive types
-            TokenKind::Name => self.parse_name_or_type(token),
+            TokenKind::Name => self.parse_name_or_type_with_ctx(token, type_params),
             t => panic!("Unexpected token for type name: {:?}", t),
         }
     }
 
-    fn parse_name_or_type(&mut self, token: Token) -> parser::Return<Ty> {
+    fn parse_name_or_type_with_ctx(
+        &mut self,
+        token: Token,
+        type_params: &HashSet<String>,
+    ) -> parser::Return<Ty> {
         // Handle other types like Array or custom types
         if token.kind == TokenKind::Name {
             let base_name = token.literal.to_string();
@@ -33,10 +42,15 @@ impl<'a> Parser<'a> {
 
                 // User defined types or arrays
                 _ => {
+                    if type_params.contains(&base_name) {
+                        // Type variable
+                        return Ok(Ty::Var(base_name));
+                    }
+
                     if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
                         // Array type
                         self.next(); // consume the LSquare
-                        self.parse_array_type(base_name)
+                        self.parse_array_type_with_ctx(base_name, type_params)
                     } else {
                         // User-defined type
                         Ok(Ty::TypeCons(base_name, vec![]))
@@ -48,12 +62,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_array_type(&mut self, base_name: String) -> parser::Return<Ty> {
+    fn parse_array_type_with_ctx(
+        &mut self,
+        base_name: String,
+        type_params: &HashSet<String>,
+    ) -> parser::Return<Ty> {
         // Array[int]
         let mut type_args = Vec::new();
 
         loop {
-            type_args.push(self.parse_typename()?);
+            type_args.push(self.parse_typename_with_ctx(type_params)?);
             if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
                 self.next(); // consume the comma
             } else {

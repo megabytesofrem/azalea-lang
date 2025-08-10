@@ -45,7 +45,7 @@ impl Typechecker {
                     .cloned()
                     .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
 
-                self.hydrate_type(env, &ty);
+                self.hydrate_type(&ty, env);
                 Ok(self.instantiate(&ty))
             }
 
@@ -479,6 +479,65 @@ impl Typechecker {
         Ok(Ty::TypeCons(record_decl.name.clone(), instantiated_params))
     }
 
+    pub fn check_record_against_expected_type(
+        &mut self,
+        record_expr: &RecordExpr,
+        expected_ty: &Ty,
+        env: &mut TypingEnv,
+        location: SourceLoc,
+    ) -> Return<Ty> {
+        // Get record definition
+        let record_decl = self
+            .type_registry
+            .lookup_record(&record_expr.name)
+            .ok_or_else(|| SemanticError::UndefinedVariable(record_expr.name.clone()))?
+            .clone();
+
+        // Extract type parameters from expected type: Simple[Int] -> [Int]
+        let type_params = match expected_ty {
+            Ty::TypeCons(name, params) if name == &record_expr.name => params,
+            _ => return self.infer_record_expr(record_expr, env, location), // fallback
+        };
+
+        // Build substitution map: A -> Int, B -> String, etc.
+        let subst_map = self.build_type_param_substitution(&record_decl, type_params);
+
+        // Check each field with substituted types
+        for (field_name, field_expr) in &record_expr.fields {
+            let expected_field_ty = record_decl
+                .fields
+                .iter()
+                .find(|(name, _)| name == field_name)
+                .map(|(_, ty)| self.hydrate_type(ty, &subst_map))
+                .ok_or_else(|| SemanticError::UndefinedFieldOrVariant {
+                    field: field_name.clone(),
+                    structure: record_expr.name.clone(),
+                    location: location.clone(),
+                })?;
+
+            let actual_field_ty = self.infer_type(env, field_expr, location.clone())?;
+            let _field_subst =
+                self.unify(&expected_field_ty, &actual_field_ty, location.clone())?;
+            // Don't extend env with field_subst - it should only affect this record check
+        }
+
+        Ok(expected_ty.clone())
+    }
+
+    fn build_type_param_substitution(
+        &self,
+        record_decl: &Record,
+        type_params: &[Ty],
+    ) -> HashMap<String, Ty> {
+        // Use the record's declared type parameter order instead of HashSet order
+        record_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, param_name)| type_params.get(i).map(|ty| (param_name.clone(), ty.clone())))
+            .collect()
+    }
+
     fn infer_lam(&mut self, lam: &Expr, env: &mut TypingEnv, location: SourceLoc) -> Return<Ty> {
         if let Expr::Lam {
             args,
@@ -504,7 +563,7 @@ impl Typechecker {
             // Unify the return type with the body
             let body_ty = self.infer_type(env, &body.target, body.loc.clone())?;
             let subst = self.unify(&return_ty, &body_ty, location.clone())?;
-            let return_ty = self.hydrate_type(env, return_ty);
+            let return_ty = self.hydrate_type(&return_ty, &subst);
             env.extend(subst);
 
             // Exit the lambda scope

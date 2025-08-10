@@ -77,6 +77,7 @@ pub type TypedPair = (String, Ty);
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
     pub name: String,
+    pub type_params: Vec<String>,
     pub fields: Vec<(String, Ty)>,
 }
 
@@ -113,7 +114,10 @@ impl Record {
     pub fn to_type(&self) -> Ty {
         Ty::TypeCons(
             self.name.clone(),
-            self.fields.iter().map(|(_, ty)| ty.clone()).collect(),
+            self.type_params
+                .iter()
+                .map(|param| Ty::Var(param.clone()))
+                .collect(),
         )
     }
 }
