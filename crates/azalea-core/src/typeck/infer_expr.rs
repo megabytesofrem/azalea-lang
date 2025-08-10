@@ -141,7 +141,8 @@ impl Typechecker {
                         // Type check each argument
                         for (arg, (_, expected_ty)) in args.iter().zip(extern_decl.args.iter()) {
                             let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
-                            self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                            let subst = self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                            env.extend(subst);
                         }
 
                         println!(
@@ -196,7 +197,8 @@ impl Typechecker {
                             for (arg, expected_ty) in args.iter().zip(instantiated_arg_types.iter())
                             {
                                 let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
-                                self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                                let subst = self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                                env.extend(subst);
                             }
 
                             Ok(instantiated_return_ty)
@@ -357,11 +359,28 @@ impl Typechecker {
             _ => todo!("Type inference for expression: {:?}", expr),
         };
 
-        println!(
-            "DEBUG: Infer type for expr: {} => {}",
-            expr.pretty(),
-            inferred_ty.clone()?.pretty_with_loc(&location)
-        );
+        match expr {
+            // Only print debug information for certain expressions
+            Expr::Lam { .. } => {
+                println!(
+                    "DEBUG: Infer type for lambda: {} => {}, Γ: {}",
+                    expr.pretty(),
+                    inferred_ty.clone()?.pretty_with_loc(&location),
+                    self.pretty_print_env(env),
+                );
+            }
+
+            Expr::FnCall { .. } => {
+                println!(
+                    "DEBUG: Infer type for expr: {} => {}, Γ: {}",
+                    expr.pretty(),
+                    inferred_ty.clone()?.pretty_with_loc(&location),
+                    self.pretty_print_env(env),
+                );
+            }
+
+            _ => print!(""),
+        }
 
         Ok(inferred_ty?)
     }

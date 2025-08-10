@@ -47,7 +47,6 @@ impl Typechecker {
     /// Return a fresh type variable.
     pub fn fresh(&mut self) -> String {
         let var = format!("t{}", self.next_var);
-        println!("DEBUG: Fresh type variable: {}", var);
         self.next_var += 1;
         var
     }
@@ -519,6 +518,14 @@ impl Typechecker {
                         message: "Failed to pop function scope".to_string(),
                         location: stmt.loc.clone(),
                     })?;
+
+                // Debug print
+                let generalize_ty = self.generalize(&env, &func_ty);
+                println!(
+                    "DEBUG: Generalize function '{}' => {}",
+                    func_decl.name.clone(),
+                    generalize_ty.pretty(),
+                );
 
                 // Add the function to both the resolver and typing environment
                 self.resolver

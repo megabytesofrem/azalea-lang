@@ -1,0 +1,5 @@
+-- Forall quantifier
+fn id[A](x: A): A = x
+
+let t1: Int = id(123)
+let t2: String = id("hello")

@@ -1,10 +1,11 @@
+-- Extern functions
 extern console_log(s: String)
 extern math_random(): Float
 extern math_abs(x: Float): Float
 extern math_sqrt(x: Float): Float
 extern to_string(x: Any): String
 
-fn main(): Unit = do
+fn main() = do
   console_log("Hello, Azalea!")
   let random_value: Float = math_random()
   
@@ -13,13 +14,12 @@ fn main(): Unit = do
     then "Random value is greater than 0.5"
     else "Random value is less than or equal to 0.5"
 
-  let result_num: String = 
-    if random_value > 0.5 
-      then to_string(1)
-      else to_string(0)
+  -- let result_num: String = 
+  --   if random_value > 0.5 
+  --     then to_string(1)
+  --     else to_string(0)
 
   console_log("The result is: " + result)
-  console_log("The numeric result is: " + result_num)
 end
 
 -- Example of a function that uses math functions

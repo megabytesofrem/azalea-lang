@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 
 use crate::ast::ast_types::{Function, Record, Ty};
 
@@ -8,28 +9,49 @@ use crate::typeck::typecheck::{Typechecker, TypingEnv};
 
 impl Typechecker {
     /// Find all free type variables in a type.
-    pub fn find_free_type_vars(&self, ty: &Ty) -> Vec<String> {
+    pub fn find_free_type_vars(&self, ty: &Ty) -> HashSet<String> {
         match ty {
-            Ty::Var(v) => vec![v.clone()],
+            Ty::Var(v) => HashSet::from([v.clone()]),
             Ty::Array(inner) => self.find_free_type_vars(inner),
             Ty::Fn(func) => {
                 let mut vars = func
                     .args
                     .iter()
                     .flat_map(|(_, ty)| self.find_free_type_vars(ty))
-                    .collect::<Vec<_>>();
+                    .collect::<HashSet<_>>();
 
                 vars.extend(self.find_free_type_vars(&func.return_ty));
                 vars
             }
 
-            Ty::TypeCons(_, type_params) => type_params
-                .iter()
-                .flat_map(|ty| self.find_free_type_vars(ty))
-                .collect(),
+            Ty::TypeCons(name, type_params) => {
+                let mut vars = HashSet::new();
+
+                // This fixes the case where a type constructor has no type parameters.
+                //
+                // Before this, our compiler would return [] since it was only looking at the type parameters
+                // and ignoring the type constructor itself.
+                // For example, `Option` would return [] instead of ["Option"].
+                if type_params.is_empty()
+                    && name.chars().next().map_or(false, |c| c.is_uppercase())
+                    && !self.type_registry.is_record_defined(name)
+                {
+                    // Check if this type constructor represents a type parameter
+                    vars.insert(name.clone());
+                }
+
+                vars.extend(
+                    type_params
+                        .iter()
+                        .flat_map(|ty| self.find_free_type_vars(ty))
+                        .collect::<Vec<_>>(),
+                );
+
+                vars
+            }
 
             // All other types are concrete and have no free variables
-            _ => vec![],
+            _ => HashSet::new(),
         }
     }
 
@@ -73,13 +95,7 @@ impl Typechecker {
         // whereas `instantiate` creates a new instance of a polymorphic type, with fresh
         // type variables.
 
-        println!(
-            "DEBUG: Instantiating type {} with {}",
-            ty.pretty(),
-            self.pretty_print_env(instantiation_env)
-        );
-
-        match ty {
+        let instantiated = match ty {
             Ty::TypeCons(name, args) if args.is_empty() => {
                 // This might be a type parameter, since it looks like `A`
                 // foo :: A -> A
@@ -100,7 +116,16 @@ impl Typechecker {
 
             // For all other types, we simply return the type as is
             _ => ty.clone(),
-        }
+        };
+
+        println!(
+            "DEBUG: Instantiate type '{}' with {} => {}",
+            ty.pretty(),
+            self.pretty_print_env(instantiation_env),
+            instantiated.pretty()
+        );
+
+        instantiated
     }
 
     pub fn collect_type_params(&self, ty: &Ty, type_params: &mut HashSet<String>) {
@@ -138,19 +163,12 @@ impl Typechecker {
         let mut result = String::new();
         result.push_str("Γ{");
 
-        let mut index = 0;
+        let entries: Vec<String> = map
+            .iter()
+            .map(|(var, ty)| format!("{} := {}", var, ty.pretty()))
+            .collect();
 
-        for (var, ty) in map {
-            // Format the variable and its type
-            result.push_str(&format!("{} := {}", var, ty.pretty()));
-
-            // Dont push a comma for the first element
-            if index > 0 {
-                result.push_str(", ");
-            }
-
-            index += 1;
-        }
+        result.push_str(&entries.join(", "));
         result.push_str("}");
         result
     }
@@ -166,9 +184,10 @@ impl Typechecker {
             .flat_map(|ty| self.find_free_type_vars(ty))
             .collect();
 
+        println!("DEBUG: Vars bound in environment Γ: {:?}", env_vars);
+
         // Filter out any type variables already bound in the environment
-        // leaving us with the free variables
-        let generalized_vars: Vec<String> = free_vars
+        let generalized_vars: HashSet<String> = free_vars
             .into_iter()
             .filter(|var| !env_vars.contains(var))
             .collect();
@@ -176,8 +195,8 @@ impl Typechecker {
         if generalized_vars.is_empty() {
             ty.clone()
         } else {
-            // Return a universally quantified type, a forall type
-            Ty::ForAll(generalized_vars, Box::new(ty.clone()))
+            let result = Ty::ForAll(generalized_vars.clone(), Box::new(ty.clone()));
+            result
         }
     }
 

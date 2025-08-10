@@ -94,7 +94,7 @@ impl Pretty for Literal {
         match self {
             Literal::Int(i) => format!("{}", i),
             Literal::Float(f) => format!("{}", f),
-            Literal::String(s) => format!("\"{}\"", s),
+            Literal::String(s) => format!("{}", s),
             Literal::Bool(b) => format!("{}", b),
         }
     }

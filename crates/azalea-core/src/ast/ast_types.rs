@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{collections::HashSet, hash::Hash};
 
 use crate::parse::span::Span;
 
@@ -43,7 +43,7 @@ pub enum Ty {
     Fn(Box<Function>),
 
     /// A universally quantified polymorphic type, e.g. `forall a. a -> a`
-    ForAll(Vec<String>, Box<Ty>),
+    ForAll(HashSet<String>, Box<Ty>),
 }
 
 // Implement PartialEq, Eq and Hash for `Ty` since it's needed in
