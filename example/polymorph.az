@@ -1,9 +1,10 @@
-fn id[A](x: A): A = x
-fn head[A](x: Array[A]): A = x.[0]
-fn snd[A](x: Array[A]): A = x.[1]
+record Container ={
+  value: A,
+}
 
-fn stupid[A](x: A): A = x
 
-fn is_empty[A](x: Array[A]): Int = 
-  if stupid(x) == x then 1
-  else 0
+fn new_container[Int](x: Int): Container = Container {
+  value: x
+}
+
+fn get_value[A](c: Container[A]): A = c.value

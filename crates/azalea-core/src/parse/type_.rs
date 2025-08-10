@@ -10,38 +10,38 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_typename(&mut self) -> parser::Return<Ty> {
         let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
 
-        let reserved_types = ["Int", "Float", "String", "Bool", "Unit", "Array", "Fn"];
-
         match token.kind {
             // Reserved keywords for built-in, primitive types
-            TokenKind::KwType(ref type_name) => match type_name.as_str() {
+            TokenKind::Name => self.parse_name_or_type(token),
+            t => panic!("Unexpected token for type name: {:?}", t),
+        }
+    }
+
+    fn parse_name_or_type(&mut self, token: Token) -> parser::Return<Ty> {
+        // Handle other types like Array or custom types
+        if token.kind == TokenKind::Name {
+            let base_name = token.literal.to_string();
+
+            // Check if the base name is a built-in type
+            match base_name.as_str() {
                 "Int" => Ok(Ty::Int),
                 "Float" => Ok(Ty::Float),
                 "String" => Ok(Ty::String),
                 "Bool" => Ok(Ty::Bool),
                 "Unit" => Ok(Ty::Unit),
-                "Fn" => self.parse_fn_type(),
-                _ => self.parse_other_type(token),
-            },
+                "Any" => Ok(Ty::Any),
 
-            // User defined types or built-in types
-            TokenKind::Name => self.parse_other_type(token),
-
-            t => panic!("Unexpected token for type name: {:?}", t),
-        }
-    }
-
-    fn parse_other_type(&mut self, token: Token) -> parser::Return<Ty> {
-        // Handle other types like Array or custom types
-        if token.kind == TokenKind::Name {
-            let base_name = token.literal.to_string();
-            if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
-                // Array type
-                self.next(); // consume the LSquare
-                self.parse_array_type(base_name)
-            } else {
-                // User-defined type
-                Ok(Ty::TypeCons(base_name, vec![]))
+                // User defined types or arrays
+                _ => {
+                    if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
+                        // Array type
+                        self.next(); // consume the LSquare
+                        self.parse_array_type(base_name)
+                    } else {
+                        // User-defined type
+                        Ok(Ty::TypeCons(base_name, vec![]))
+                    }
+                }
             }
         } else {
             Err(ParserError::ExpectedType(token.location))

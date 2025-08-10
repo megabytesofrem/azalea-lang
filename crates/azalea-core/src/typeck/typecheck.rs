@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::ast_types::{Function, Record, RecordExpr, Ty};
+use crate::ast::pretty::Pretty;
 use crate::ast::{Expr, Literal, Stmt};
 use crate::lexer::SourceLoc;
 use crate::parse::span::Span;
@@ -43,6 +44,7 @@ impl Typechecker {
     /// Return a fresh type variable.
     pub fn fresh(&mut self) -> String {
         let var = format!("t{}", self.next_var);
+        println!("DEBUG: Fresh type variable: {}", var);
         self.next_var += 1;
         var
     }
@@ -92,7 +94,7 @@ impl Typechecker {
         // This is a bug in the unification logic, since we should be able to unify a type constructor with a record type of the same name
         // since it is logically sound that `Loop` is a type constructor for the `Loop` record.
 
-        match (t1, t2) {
+        let map = match (t1, t2) {
             (t1, t2) if t1 == t2 => {
                 // If both types are the same, return an empty substitution
                 Ok(HashMap::new())
@@ -208,9 +210,18 @@ impl Typechecker {
 
             _ => Err(SemanticError::UnificationError {
                 message: format!("Cannot unify {t1:?} with {t2:?}"),
-                location,
+                location: location.clone(),
             }),
-        }
+        };
+
+        println!(
+            "DEBUG: Unifying {} with {} => {}",
+            t1.pretty(),
+            t2.pretty(),
+            self.pretty_print_env(&map.clone()?)
+        );
+
+        map
     }
 
     /// Infer the type of an expression within a substitution environment `env`
@@ -220,8 +231,8 @@ impl Typechecker {
         expr: &Expr,
         location: SourceLoc,
     ) -> Return<Ty> {
-        match expr {
-            Expr::Literal(lit) => self.infer_literal(lit, env, location),
+        let inferred_ty = match expr {
+            Expr::Literal(lit) => self.infer_literal(lit, env, location.clone()),
             Expr::Ident(name) => {
                 // First check if the variable exists in the resolver (for scope checking)
                 if !self.resolver.is_variable_defined(name) {
@@ -261,7 +272,7 @@ impl Typechecker {
                 Ok(ty)
             }
 
-            Expr::Record(record) => self.infer_record_expr(record, env, location),
+            Expr::Record(record) => self.infer_record_expr(record, env, location.clone()),
 
             Expr::Array { elements } => {
                 let mut element_types = Vec::new();
@@ -307,10 +318,59 @@ impl Typechecker {
                 }
             }
 
-            Expr::FnCall { .. } => {
-                // Not enough information to unify right now, we'll come back to it later
-                Ok(Ty::Unresolved)
-            }
+            Expr::FnCall { target, args } => match &target.target {
+                Expr::Ident(name) => {
+                    let func_ty = env
+                        .get(name)
+                        .cloned()
+                        .ok_or_else(|| SemanticError::UndefinedFunction(name.clone()))?;
+
+                    match func_ty {
+                        Ty::Fn(func) => {
+                            // Handle generic function instantiation
+                            let mut instantiation_env = HashMap::new();
+                            for ty_param in &func.type_params {
+                                // Create a fresh type variable for each type parameter
+                                let fresh_var = self.fresh();
+                                instantiation_env.insert(ty_param.clone(), Ty::Var(fresh_var));
+                            }
+
+                            let instantiated_arg_types = func
+                                .args
+                                .iter()
+                                .map(|(_, ty)| self.instantiate_type(ty, &instantiation_env))
+                                .collect::<Vec<_>>();
+
+                            let instantiated_return_ty =
+                                self.instantiate_type(&func.return_ty, &instantiation_env);
+
+                            // Type check arguments
+                            if args.len() != func.args.len() {
+                                return Err(SemanticError::ArityMismatch {
+                                    expected: func.args.len(),
+                                    found: args.len(),
+                                    location: target.loc.clone(),
+                                });
+                            }
+
+                            for (arg, expected_ty) in args.iter().zip(instantiated_arg_types.iter())
+                            {
+                                let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
+                                self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                            }
+
+                            Ok(instantiated_return_ty)
+                        }
+
+                        // TODO: Add support for `foo[0](a, b)` syntax
+                        _ => todo!("Complex function call handling not implemented yet"),
+                    }
+                }
+                e => todo!(
+                    "Complex function call handling not implemented yet: {:?}",
+                    e
+                ),
+            },
 
             Expr::If { cond, then, else_ } => {
                 // Infer the condition type
@@ -387,7 +447,15 @@ impl Typechecker {
             }
 
             _ => todo!("Type inference for expression: {:?}", expr),
-        }
+        };
+
+        println!(
+            "DEBUG: Infer type for expr: {} => {}",
+            expr.pretty(),
+            inferred_ty.clone()?.pretty_with_loc(&location)
+        );
+
+        Ok(inferred_ty?)
     }
 
     /// Infer the type of a literal expression

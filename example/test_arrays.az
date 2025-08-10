@@ -1,4 +1,4 @@
-let arr = [1, 2, 3]
+let arr: Array[Int] = [1, 2, 3]
 let first: Int = arr.[0]
 let last: Int = arr.[2]
 

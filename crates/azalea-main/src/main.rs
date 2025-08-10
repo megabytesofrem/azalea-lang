@@ -29,7 +29,7 @@ fn main() {
     println!("\nParsing...\n");
 
     let parse = Parser::parse(tokens).unwrap();
-    println!("AST: {:#?}", parse.ast);
+    // println!("AST: {:#?}", parse.ast);
     println!("Errors: {:#?}", parse.errors());
 
     // Type check the AST

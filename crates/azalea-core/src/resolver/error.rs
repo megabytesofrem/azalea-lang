@@ -30,6 +30,12 @@ pub enum SemanticError {
         structure: String,
         location: SourceLoc,
     },
+
+    ArityMismatch {
+        expected: usize,
+        found: usize,
+        location: SourceLoc,
+    },
 }
 
 impl SemanticError {
@@ -92,6 +98,16 @@ impl SemanticError {
                 location,
             } => ErrorReport::new(
                 format!("Undefined field or variant: {} in {}", field, structure),
+                "Semantic error".to_string(),
+                location.clone(),
+            ),
+
+            SemanticError::ArityMismatch {
+                expected,
+                found,
+                location,
+            } => ErrorReport::new(
+                format!("Arity mismatch: expected {}, found {}", expected, found),
                 "Semantic error".to_string(),
                 location.clone(),
             ),

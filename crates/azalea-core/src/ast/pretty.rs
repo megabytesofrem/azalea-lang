@@ -94,7 +94,7 @@ impl Pretty for Ty {
                 format!("∀{}. {}", vars_str.join(", "), ty.pretty())
             }
 
-            _ => todo!("Not implemented"),
+            ty => todo!("Not implemented: {:?}", ty),
         }
     }
 
@@ -183,7 +183,10 @@ impl Pretty for Expr {
                 )
             }
 
-            _ => todo!(),
+            e => {
+                // For any other expression, we just use the debug format
+                format!("{:?}", e)
+            }
         }
     }
 

@@ -61,11 +61,16 @@ fn default_js_value(ty: &Ty) -> String {
             // Default value for an empty array of the given type
             format!("[] /* ARRAY[{}] */", inner_ty.pretty())
         }
-        Ty::TypeCons(name, _) => {
+        Ty::TypeCons(name, args) => {
             // For user-defined types, we can return a default value if one exists
             // This is a placeholder; in a real implementation, you might want to
             // generate a constructor call or similar.
-            format!("new {}()", name)
+
+            if args.is_empty() {
+                format!("{}", default_js_value(&Ty::Unit))
+            } else {
+                "{}".to_string()
+            }
         }
         Ty::Record(record) => {
             // For records, we can return an empty record with the fields initialized to their defaults
@@ -156,7 +161,7 @@ impl Emit for JSCodegen {
                     .iter()
                     .map(|(name, expr)| format!("{}: {}", name, self.visit_expr(&expr)))
                     .collect();
-                format!("{} {{ {} }}", record.name, fields.join(", "))
+                format!("/*{}*/ {{ {} }}", record.name, fields.join(", "))
             }
             Expr::Array { elements } => {
                 let emit: Vec<String> = elements

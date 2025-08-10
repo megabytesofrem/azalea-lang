@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::ast_types::{Function, Record, Ty};
 
+use crate::ast::pretty::Pretty;
+use crate::lexer::SourceLoc;
 use crate::typeck::typecheck::{Typechecker, TypingEnv};
 
 impl Typechecker {
@@ -66,6 +68,64 @@ impl Typechecker {
             // For all other cases, we simply return the type as is
             _ => ty.clone(),
         }
+    }
+
+    /// This function is similar to `instantiate`, but it substitutes type parameters from a
+    /// provided typing environment whereas `instantiate` creates fresh type variables
+    pub fn instantiate_type(&self, ty: &Ty, instantiation_env: &TypingEnv) -> Ty {
+        // Use this when we know what the type parameters should be substituted with
+        // whereas `instantiate` creates a new instance of a polymorphic type, with fresh
+        // type variables.
+
+        println!(
+            "DEBUG: Instantiating type {} with {}",
+            ty.pretty(),
+            self.pretty_print_env(instantiation_env)
+        );
+
+        match ty {
+            Ty::TypeCons(name, args) if args.is_empty() => {
+                // This might be a type parameter, since it looks like `A`
+                // foo :: A -> A
+                instantiation_env
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| ty.clone())
+            }
+            Ty::TypeCons(name, args) => {
+                // For type constructors, instantiate each type parameter recursively
+                let instantiated_args: Vec<Ty> = args
+                    .iter()
+                    .map(|arg| self.instantiate_type(arg, instantiation_env))
+                    .collect();
+
+                Ty::TypeCons(name.clone(), instantiated_args)
+            }
+
+            // For all other types, we simply return the type as is
+            _ => ty.clone(),
+        }
+    }
+
+    pub fn pretty_print_env(&self, map: &TypingEnv) -> String {
+        let mut result = String::new();
+        result.push_str("Γ{");
+
+        let mut index = 0;
+
+        for (var, ty) in map {
+            // Format the variable and its type
+            result.push_str(&format!("{} := {}", var, ty.pretty()));
+
+            // Dont push a comma for the first element
+            if index > 0 {
+                result.push_str(", ");
+            }
+
+            index += 1;
+        }
+        result.push_str("}");
+        result
     }
 
     /// Generalize a type by universally quantifying free type variables.
