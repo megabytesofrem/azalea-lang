@@ -283,6 +283,34 @@ impl Typechecker {
                 Ok(())
             }
 
+            Stmt::ExternDecl(extern_func) => {
+                // Store the extern function in the type registry
+                self.type_registry.define_extern(extern_func.clone());
+
+                let func = Function {
+                    name: extern_func.name.clone(),
+                    args: extern_func.args.clone(),
+                    type_params: vec![],
+                    return_ty: extern_func.return_ty.clone(),
+
+                    // External functions do not have a body since they aren't defined by us
+                    body: None,
+                    body_expr: None,
+                    is_extern: true,
+                };
+
+                let func_ty = Ty::Fn(Box::new(func));
+
+                // Add the function to the resolver (for scope management) and typing environment (for type tracking)
+                self.resolver
+                    .define_function(extern_func.name.clone(), func_ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(extern_func.name.clone()))?;
+
+                env.insert(extern_func.name.clone(), func_ty);
+
+                Ok(())
+            }
+
             Stmt::Let { name, ty, value } => {
                 let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
                 let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
@@ -393,14 +421,7 @@ impl Typechecker {
                     fields: record.fields.clone(),
                 };
 
-                let result = self.type_registry.register_record(record_decl);
-                if !result.is_ok() {
-                    println!(
-                        "DEBUG: Failed to register record {}: {:?}",
-                        record.name,
-                        result.err().unwrap()
-                    );
-                }
+                self.type_registry.define_record(record_decl);
 
                 // Add the record to the environment
                 env.insert(record.name.clone(), ty.clone());
@@ -487,6 +508,8 @@ impl Typechecker {
                     } else {
                         None
                     },
+
+                    is_extern: false,
                 }));
 
                 // Pop the function scope

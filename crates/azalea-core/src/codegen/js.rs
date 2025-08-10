@@ -112,6 +112,78 @@ impl JSCodegen {
         }
     }
 
+    fn visit_function_call(&mut self, target: &Expr, args: Vec<Span<Expr>>) -> String {
+        if let Expr::Ident(name) = target {
+            // Special case for to_string - convert to method call
+            if name == "to_string" {
+                if args.len() != 1 {
+                    panic!("to_string expects exactly one argument");
+                }
+
+                let arg = self.visit_expr(&args.first().unwrap().target);
+                return format!("{}.toString()", arg);
+            }
+
+            // Auto-map function names for extern functions
+            let js_name = self.auto_map_function_name(name, args.clone());
+            let args_emit: Vec<String> = args
+                .iter()
+                .map(|arg| self.visit_expr(&arg.target))
+                .collect();
+
+            format!("{}({})", js_name, args_emit.join(", "))
+        } else {
+            // If the target is not an identifier, we need to visit it as an expression
+            let target_js = self.visit_expr(target);
+            let args_emit: Vec<String> = args
+                .iter()
+                .map(|arg| self.visit_expr(&arg.target))
+                .collect();
+
+            format!("{}({})", target_js, args_emit.join(", "))
+        }
+    }
+
+    fn auto_map_function_name(&mut self, name: &str, args: Vec<Span<Expr>>) -> String {
+        // Map function names to their JavaScript equivalents
+        match name {
+            name if name.starts_with("console_") => {
+                let method = &name[8..];
+                format!("console.{}", method)
+            }
+            name if name.starts_with("json_") => {
+                let method = &name[5..];
+                format!("JSON.{}", self.snake_to_camel(method))
+            }
+            name if name.starts_with("math_") => {
+                let method = &name[5..];
+                format!("Math.{}", self.snake_to_camel(method))
+            }
+
+            _ => name.to_string(), // Default case, return the name as is
+        }
+    }
+
+    fn snake_to_camel(&self, name: &str) -> String {
+        let mut result = String::new();
+        let mut capitalize_next = false;
+
+        for c in name.chars() {
+            if c == '_' {
+                capitalize_next = true;
+            } else {
+                if capitalize_next {
+                    result.push(c.to_ascii_uppercase());
+                    capitalize_next = false;
+                } else {
+                    result.push(c);
+                }
+            }
+        }
+
+        result
+    }
+
     fn visit_unary_op(&mut self, op: &Op, expr: &Expr) -> String {
         let expr_js = self.visit_expr(expr);
         match op {
@@ -162,13 +234,7 @@ impl Emit for JSCodegen {
                 format!("{}[{}]", target_emit, index_emit)
             }
             Expr::FnCall { target, args } => {
-                let target_emit = self.visit_expr(&target.target);
-                let args_emit: Vec<String> = args
-                    .iter()
-                    .map(|arg| self.visit_expr(&arg.target))
-                    .collect();
-
-                format!("{}({})", target_emit, args_emit.join(", "))
+                self.visit_function_call(&target.target, args.to_vec())
             }
             Expr::Lam {
                 args,
@@ -237,7 +303,7 @@ impl Emit for JSCodegen {
 
             Stmt::Mut { name, ty: _, value } => {
                 let value_emit = self.visit_expr(&value.target);
-                format!("let /*MUT*/ {} = {};", name, value_emit)
+                format!("let /*mut*/ {} = {};", name, value_emit)
             }
 
             Stmt::Assign { name, value } => {
@@ -254,7 +320,7 @@ impl Emit for JSCodegen {
                     .map(|(name, ty)| format!("{}: {}", name, default_js_value(ty)))
                     .collect();
                 format!(
-                    "const /*RECORD*/ {} = {{ {} }};",
+                    "const /*record*/ {} = {{ {} }};",
                     record.name,
                     fields.join(", ")
                 )
@@ -267,11 +333,25 @@ impl Emit for JSCodegen {
                     .map(|variant| format!("\"{}\"", variant))
                     .collect();
                 format!(
-                    "const /*ENUM*/ {} = {{ {} }};",
+                    "const /*enum*/ {} = {{ {} }};",
                     enum_decl.name,
                     variants.join(", ")
                 )
             }
+
+            Stmt::ExternDecl(func) => {
+                // For extern functions, we just emit the function signature
+                // without any body, as they are expected to be defined in JS.
+                let func_args: Vec<String> =
+                    func.args.iter().map(|(name, _ty)| name.clone()).collect();
+
+                format!(
+                    "/* extern: function {}({}) */",
+                    func.name,
+                    func_args.join(", ")
+                )
+            }
+
             Stmt::FnDecl(func) => {
                 // Discard any type information for JS
                 let func_args: Vec<String> =

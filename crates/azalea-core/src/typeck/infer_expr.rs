@@ -120,6 +120,46 @@ impl Typechecker {
 
             Expr::FnCall { target, args } => match &target.target {
                 Expr::Ident(name) => {
+                    // Check if the function is an `extern` function first
+                    if self.type_registry.is_extern_function(name) {
+                        // If it's an extern function, we need to look it up in the type registry
+                        let extern_decl = self
+                            .type_registry
+                            .lookup_extern_function(name)
+                            .unwrap()
+                            .clone();
+
+                        // Type check arguments against the extern function signature
+                        if args.len() != extern_decl.args.len() {
+                            return Err(SemanticError::ArityMismatch {
+                                expected: extern_decl.args.len(),
+                                found: args.len(),
+                                location: target.loc.clone(),
+                            });
+                        }
+
+                        // Type check each argument
+                        for (arg, (_, expected_ty)) in args.iter().zip(extern_decl.args.iter()) {
+                            let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
+                            self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                        }
+
+                        println!(
+                            "DEBUG: Extern function call: {} with args: {:?}",
+                            name,
+                            extern_decl
+                                .args
+                                .iter()
+                                .map(|(_, ty)| ty.pretty())
+                                .collect::<Vec<_>>()
+                        );
+
+                        // Return the return type of the extern function
+                        return Ok(extern_decl.return_ty.clone());
+                    }
+
+                    // Otherwise, handle it as a regular function call
+
                     let func_ty = env
                         .get(name)
                         .cloned()
@@ -206,24 +246,6 @@ impl Typechecker {
 
                 // Check if the target type is a record or an enum
                 match target_ty {
-                    // Ty::Record(record) => {
-                    //     // Find the field type in the record
-                    //     if let Some(field_ty) = record.fields.iter().find_map(|(name, ty)| {
-                    //         if name == &member.name {
-                    //             Some(ty.clone())
-                    //         } else {
-                    //             None
-                    //         }
-                    //     }) {
-                    //         Ok(field_ty)
-                    //     } else {
-                    //         Err(SemanticError::UndefinedFieldOrVariant {
-                    //             field: member.name.clone(),
-                    //             structure: record.name.clone(),
-                    //             location: member.target.loc.clone(),
-                    //         })
-                    //     }
-                    // }
                     Ty::TypeCons(name, params) => {
                         println!(
                             "DEBUG: Member access on TypeCons: '{}' with params: {:?}",

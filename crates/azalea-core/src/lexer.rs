@@ -194,6 +194,8 @@ pub enum TokenKind {
     // Keywords
     #[token("pub")]
     KwPub,
+    #[token("extern")]
+    KwExtern,
     #[token("mut")]
     KwMut,
     #[token("class")]

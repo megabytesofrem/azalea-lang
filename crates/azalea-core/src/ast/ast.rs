@@ -60,6 +60,10 @@ pub enum Stmt {
 
     EnumDecl(Enum),
 
+    /// An `extern` declaration for a JavaScript function\
+    /// This is used to bind JavaScript functions to Azalea functions.
+    ExternDecl(Function),
+
     /// A function declaration
     FnDecl(Function),
 }

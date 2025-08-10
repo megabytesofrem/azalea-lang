@@ -46,6 +46,7 @@ impl<'a> Parser<'a> {
             Some(TokenKind::KwWhile) => self.parse_while(),
             Some(TokenKind::KwRecord) => self.parse_record_decl(),
             Some(TokenKind::KwEnum) => self.parse_enum_decl(),
+            Some(TokenKind::KwExtern) => self.parse_extern_decl(),
             Some(TokenKind::KwFn) => self.parse_fn_decl(),
             Some(TokenKind::Name) => {
                 // Look ahead to see if this is an assignment (name = expr)
@@ -367,6 +368,44 @@ impl<'a> Parser<'a> {
         }
 
         Ok(spanned(Stmt::FnDecl(func), location))
+    }
+
+    fn parse_extern_decl(&mut self) -> parser::Return<Span<Stmt>> {
+        // extern name(args: ty, ...) : ty
+        let location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        self.expect(TokenKind::KwExtern)?;
+
+        let name = self.expect(TokenKind::Name)?.literal;
+
+        let mut type_params = Vec::new();
+        if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
+            self.next(); // consume '['
+            while let Some(TokenKind::Name) = self.peek().map(|t| t.kind) {
+                type_params.push(self.expect(TokenKind::Name)?.literal.to_string());
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                    self.next();
+                } else {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RSquare)?;
+        }
+
+        self.expect(TokenKind::LParen)?;
+        let args = self.parse_typed_pair_list()?;
+        self.expect(TokenKind::RParen)?;
+
+        let return_ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
+            self.next();
+            self.parse_typename()?
+        } else {
+            Ty::Unit
+        };
+
+        let func = Function::new_extern(name.to_string(), args, return_ty);
+
+        Ok(spanned(Stmt::ExternDecl(func), location))
     }
 
     fn parse_remaining_expr(&mut self, mut lhs: Span<Expr>) -> parser::Return<Span<Expr>> {

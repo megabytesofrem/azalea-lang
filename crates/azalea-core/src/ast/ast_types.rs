@@ -99,6 +99,8 @@ pub struct Function {
     // Optional body, if this is used in a function declaration
     pub body: Option<Vec<Span<Stmt>>>,
     pub body_expr: Option<Box<Span<Expr>>>, // If this is a lambda expression
+
+    pub is_extern: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -138,6 +140,7 @@ impl Function {
             return_ty,
             body: None,
             body_expr: None,
+            is_extern: false,
         }
     }
 
@@ -154,6 +157,7 @@ impl Function {
             return_ty,
             body: Some(body),
             body_expr: None,
+            is_extern: false,
         }
     }
 
@@ -170,6 +174,19 @@ impl Function {
             return_ty,
             body: None,
             body_expr: Some(body_expr),
+            is_extern: false,
+        }
+    }
+
+    pub fn new_extern(name: String, args: Vec<(String, Ty)>, return_ty: Ty) -> Self {
+        Self {
+            name,
+            args,
+            type_params: vec![],
+            return_ty,
+            body: None,
+            body_expr: None,
+            is_extern: true,
         }
     }
 }
