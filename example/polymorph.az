@@ -1,0 +1,9 @@
+fn id[A](x: A): A = x
+fn head[A](x: Array[A]): A = x.[0]
+fn snd[A](x: Array[A]): A = x.[1]
+
+fn stupid[A](x: A): A = x
+
+fn is_empty[A](x: Array[A]): Int = 
+  if stupid(x) == x then 1
+  else 0

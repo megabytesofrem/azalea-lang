@@ -7,7 +7,7 @@ fn log(x: Any) = do console.log(x) end
 
 fn block_if(x: Int) = do
   if x == 5 then do
-    mut y: Int = 0
+    let y: Int = 0
     y = 1
     log(y)
 

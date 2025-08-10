@@ -52,6 +52,7 @@ fn define_function(
     let function_ty = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: name.to_string(),
         args,
+        type_params: vec![], // No type parameters for this test
         return_ty,
         body: None,
         body_expr: None,
@@ -184,6 +185,7 @@ fn valid_function_scoping() {
     let func_ty = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "global_func".to_string(),
         args: vec![],
+        type_params: vec![],
         return_ty: Ty::Unit,
         body: None,
         body_expr: None,
@@ -201,6 +203,7 @@ fn valid_function_scoping() {
     let local_func_ty = Ty::Fn(Box::new(crate::ast::ast_types::Function {
         name: "local_func".to_string(),
         args: vec![],
+        type_params: vec![],
         return_ty: Ty::Int,
         body: None,
         body_expr: None,

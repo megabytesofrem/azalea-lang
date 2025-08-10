@@ -39,3 +39,12 @@ impl TokenKind {
         matches!(self, TokenKind::Minus)
     }
 }
+
+impl Op {
+    pub fn is_comparison(&self) -> bool {
+        matches!(
+            self,
+            Op::DoubleEq | Op::NotEq | Op::Less | Op::Greater | Op::LessEq | Op::GreaterEq
+        )
+    }
+}

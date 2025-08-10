@@ -85,15 +85,32 @@ impl Typechecker {
 
     /// Attempt to unify two types `t1` and `t2` within a typing environment `env`.
     pub fn unify(&mut self, t1: &Ty, t2: &Ty, location: SourceLoc) -> Return<TypingEnv> {
+        // Thank you @NullifyDev for pointing out these issues!
+        //
+        // FIXME: Cannot unify TypeCons(\"Loop\", []) with Record(Record { name: \"Loop\", fields: [(\"lstart\", Int), (\"lend\", Int)] })
+        //
+        // This is a bug in the unification logic, since we should be able to unify a type constructor with a record type of the same name
+        // since it is logically sound that `Loop` is a type constructor for the `Loop` record.
+
         match (t1, t2) {
             (t1, t2) if t1 == t2 => {
                 // If both types are the same, return an empty substitution
                 Ok(HashMap::new())
             }
 
+            (Ty::Unit, Ty::Unresolved)
+            | (Ty::Unresolved, Ty::Unit)
+            | (Ty::Unit, Ty::Any)
+            | (Ty::Any, Ty::Unit) => {
+                // Unit should be unifiable with any void-equivalent type such as `Any` or `Unresolved`.
+                Ok(HashMap::new())
+            }
+
             (Ty::Any, _) | (_, Ty::Any) => {
                 // If one type is `Any`, we can unify it with any other type
                 // This is an _intentional hole_ in the type system
+                println!("Unifying with Any: {:?} and {:?}", t1, t2);
+
                 Ok(HashMap::new())
             }
 
@@ -189,9 +206,10 @@ impl Typechecker {
                 Ok(subst)
             }
 
-            _ => Err(SemanticError::UnificationError(format!(
-                "Cannot unify {t1:?} with {t2:?}"
-            ))),
+            _ => Err(SemanticError::UnificationError {
+                message: format!("Cannot unify {t1:?} with {t2:?}"),
+                location,
+            }),
         }
     }
 
@@ -220,15 +238,22 @@ impl Typechecker {
                 Ok(self.instantiate(&ty))
             }
 
-            Expr::BinOp(lhs, _, rhs) => {
+            Expr::BinOp(lhs, op, rhs) => {
                 let lhs_ty = self.infer_type(env, &lhs.target, lhs.loc.clone())?;
                 let rhs_ty = self.infer_type(env, &rhs.target, rhs.loc.clone())?;
 
-                // Unify the types of both sides
-                let subst = self.unify(&lhs_ty, &rhs_ty, location.clone())?;
-                env.extend(subst);
+                if op.is_comparison() {
+                    // Special case: for comparison operators, we expect both sides to be of the same type
+                    self.unify(&lhs_ty, &rhs_ty, location.clone())?;
+                    Ok(Ty::Bool)
+                } else {
+                    // For other binary operations, we can assume that the types are compatible
+                    // and we will unify them later in the function call.
+                    let subst = self.unify(&lhs_ty, &rhs_ty, location.clone())?;
+                    env.extend(subst);
 
-                Ok(lhs_ty)
+                    Ok(lhs_ty)
+                }
             }
 
             Expr::UnOp(_, expr) => {
@@ -251,16 +276,35 @@ impl Typechecker {
                     self.unify(&first_ty, ty, location.clone())?;
                 }
 
-                Ok(Ty::Array(Box::new(first_ty)))
+                Ok(Ty::TypeCons("Array".to_string(), vec![first_ty]))
             }
 
             Expr::ArrayIndex { target, index } => {
                 let target_ty = self.infer_type(env, &target.target, target.loc.clone())?;
                 let index_ty = self.infer_type(env, &index.target, index.loc.clone())?;
 
+                // Index should be Int
                 self.unify(&index_ty, &Ty::Int, location.clone())?;
 
-                Ok(target_ty)
+                // Extract the inner type of the array
+                match target_ty {
+                    Ty::TypeCons(name, params) if name == "Array" && params.len() == 1 => {
+                        // If the target is an array type, return the inner type
+                        Ok(params[0].clone())
+                    }
+                    Ty::Array(inner) => {
+                        // If the target is an array type, return the inner type
+                        Ok(*inner.clone())
+                    }
+                    _ => {
+                        // If the target is not an array type, we can't index it
+                        Err(SemanticError::TypeMismatch {
+                            expected: Ty::Array(Box::new(Ty::Any)),
+                            found: target_ty,
+                            location: target.loc.clone(),
+                        })
+                    }
+                }
             }
 
             Expr::FnCall { .. } => {
@@ -470,6 +514,7 @@ impl Typechecker {
             Stmt::Let { name, ty, value } => {
                 let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
                 let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
+
                 env.extend(local_subst);
 
                 // Add the variable to both the resolver (for scope management) and typing environment (for type tracking)
@@ -535,9 +580,12 @@ impl Typechecker {
                 body.iter()
                     .try_for_each(|stmt| self.check(env, stmt, location.clone()))?;
 
-                self.resolver.pop_scope().map_err(|_| {
-                    SemanticError::UnificationError("Failed to pop for loop scope".to_string())
-                })?;
+                self.resolver
+                    .pop_scope()
+                    .map_err(|_| SemanticError::UnificationError {
+                        message: "Failed to pop for loop scope".to_string(),
+                        location,
+                    })?;
 
                 env.remove(name);
                 Ok(())
@@ -582,6 +630,12 @@ impl Typechecker {
                 self.resolver.push_scope();
 
                 let mut local_env = env.clone();
+
+                // Add type parameters as fresh type variables to the environment
+                for ty_param in &func_decl.type_params {
+                    let ty_var = Ty::Var(self.fresh());
+                    local_env.insert(ty_param.clone(), ty_var);
+                }
 
                 for (arg_name, arg_ty) in &func_decl.args {
                     // Handle types that are unknown for now but can be inferred later
@@ -629,6 +683,7 @@ impl Typechecker {
                 let func_ty = Ty::Fn(Box::new(Function {
                     name: func_decl.name.clone(),
                     args: args,
+                    type_params: func_decl.type_params.clone(),
                     return_ty: return_ty,
                     body: if func_decl.body.is_some() {
                         Some(func_decl.body.clone().unwrap())
@@ -643,9 +698,12 @@ impl Typechecker {
                 }));
 
                 // Pop the function scope
-                self.resolver.pop_scope().map_err(|_| {
-                    SemanticError::UnificationError("Failed to pop function scope".to_string())
-                })?;
+                self.resolver
+                    .pop_scope()
+                    .map_err(|_| SemanticError::UnificationError {
+                        message: "Failed to pop function scope".to_string(),
+                        location: stmt.loc.clone(),
+                    })?;
 
                 // Add the function to both the resolver and typing environment
                 self.resolver

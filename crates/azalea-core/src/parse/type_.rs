@@ -2,13 +2,15 @@
 
 use super::Parser;
 use crate::ast::ast_types::{Function, Ty, TypedPair};
-use crate::lexer::TokenKind;
+use crate::lexer::{Token, TokenKind};
 use crate::parse::base as parser;
 use crate::parse::error::ParserError;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_typename(&mut self) -> parser::Return<Ty> {
         let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
+
+        let reserved_types = ["Int", "Float", "String", "Bool", "Unit", "Array", "Fn"];
 
         match token.kind {
             // Reserved keywords for built-in, primitive types
@@ -18,35 +20,49 @@ impl<'a> Parser<'a> {
                 "String" => Ok(Ty::String),
                 "Bool" => Ok(Ty::Bool),
                 "Unit" => Ok(Ty::Unit),
-                _ => Err(ParserError::ExpectedType(token.location)),
+                "Fn" => self.parse_fn_type(),
+                _ => self.parse_other_type(token),
             },
 
             // User defined types or built-in types
-            TokenKind::Name => match token.literal {
-                "Int" => Ok(Ty::Int),
-                "Float" => Ok(Ty::Float),
-                "String" => Ok(Ty::String),
-                "Bool" => Ok(Ty::Bool),
-                "Unit" => Ok(Ty::Unit),
-                "Array" => self.parse_array_type(),
-                "Fn" => self.parse_fn_type(),
+            TokenKind::Name => self.parse_other_type(token),
 
-                // User defined types
-                // TODO: Handle generic instantiation
-                _ => Ok(Ty::TypeCons(token.literal.to_string(), Vec::new())),
-            },
-
-            _ => Err(ParserError::ExpectedType(token.location)),
+            t => panic!("Unexpected token for type name: {:?}", t),
         }
     }
 
-    fn parse_array_type(&mut self) -> parser::Return<Ty> {
-        // [int]
-        self.check(TokenKind::LSquare)?;
-        let ty = self.parse_typename()?;
-        self.expect(TokenKind::RSquare)?;
+    fn parse_other_type(&mut self, token: Token) -> parser::Return<Ty> {
+        // Handle other types like Array or custom types
+        if token.kind == TokenKind::Name {
+            let base_name = token.literal.to_string();
+            if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
+                // Array type
+                self.next(); // consume the LSquare
+                self.parse_array_type(base_name)
+            } else {
+                // User-defined type
+                Ok(Ty::TypeCons(base_name, vec![]))
+            }
+        } else {
+            Err(ParserError::ExpectedType(token.location))
+        }
+    }
 
-        Ok(Ty::Array(Box::new(ty)))
+    fn parse_array_type(&mut self, base_name: String) -> parser::Return<Ty> {
+        // Array[int]
+        let mut type_args = Vec::new();
+
+        loop {
+            type_args.push(self.parse_typename()?);
+            if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                self.next(); // consume the comma
+            } else {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::RSquare)?;
+        Ok(Ty::TypeCons(base_name, type_args))
     }
 
     fn parse_fn_type(&mut self) -> parser::Return<Ty> {

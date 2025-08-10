@@ -96,6 +96,10 @@ pub struct Enum {
 pub struct Function {
     pub name: String,
     pub args: Vec<(String, Ty)>,
+
+    // Generic type parameters, e.g. `fn foo[T](x: T): T`
+    pub type_params: Vec<String>,
+
     pub return_ty: Ty,
 
     // Optional body, if this is used in a function declaration
@@ -130,6 +134,7 @@ impl Function {
         Self {
             name,
             args,
+            type_params: vec![],
             return_ty,
             body: None,
             body_expr: None,
@@ -145,6 +150,7 @@ impl Function {
         Self {
             name,
             args,
+            type_params: vec![],
             return_ty,
             body: Some(body),
             body_expr: None,
@@ -160,6 +166,7 @@ impl Function {
         Self {
             name,
             args,
+            type_params: vec![],
             return_ty,
             body: None,
             body_expr: Some(body_expr),

@@ -12,6 +12,7 @@ use crate::ast::{Expr, Stmt};
 use crate::lexer::{SourceLoc, TokenKind};
 use crate::parse::span::Span;
 use crate::parse::span::spanned;
+use crate::parse::type_;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_stmt(&mut self) -> parser::Return<Span<Stmt>> {
@@ -294,14 +295,44 @@ impl<'a> Parser<'a> {
 
     fn parse_fn_decl(&mut self) -> parser::Return<Span<Stmt>> {
         // fn name(args: ty, ...) -> ty =
+        #[allow(unused_assignments)]
+        // With generics: fn name[T, U](args: ty, ...) -> ty =
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwFn)?;
         let name = self.expect(TokenKind::Name)?.literal;
 
+        let mut type_params = Vec::new();
+        println!("Peek token: {:?}", self.peek());
+
+        if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
+            self.next(); // consume '['
+            while let Some(TokenKind::Name) = self.peek().map(|t| t.kind) {
+                type_params.push(self.expect(TokenKind::Name)?.literal.to_string());
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                    self.next();
+                } else {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RSquare)?;
+        }
+
         self.expect(TokenKind::LParen)?;
         let args = self.parse_typed_pair_list()?;
         self.expect(TokenKind::RParen)?;
+
+        // Check if there are any generics/type parameters
+
+        // if let Some(TokenKind::LSquare) = self.peek().map(|t| t.kind) {
+        //     //type_params = self.parse_type_params()?;
+        // } else {
+        //     // No type parameters, use an empty vector
+        //     return Ok(spanned(
+        //         Stmt::FnDecl(Function::new_with_empty(name.to_string(), args, Ty::Unit)),
+        //         location,
+        //     ));
+        // }
 
         let return_ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
             self.next();
@@ -316,7 +347,7 @@ impl<'a> Parser<'a> {
 
         // Check if the next token is `do`, and if so parse the block. Otherwise
         // we have a single expression function.
-        let func = if self.peek().map(|t| t.kind) == Some(TokenKind::KwDo) {
+        let mut func = if self.peek().map(|t| t.kind) == Some(TokenKind::KwDo) {
             let block = self.parse_block()?;
             Function::new_with_stmts(name.to_string(), args, return_ty, block)
         } else {
@@ -324,6 +355,11 @@ impl<'a> Parser<'a> {
             let expr = self.parse_expr()?;
             Function::new_with_expr(name.to_string(), args, return_ty, Box::new(expr))
         };
+
+        if !type_params.is_empty() {
+            // If we have type parameters, add them to the function
+            func.type_params = type_params;
+        }
 
         Ok(spanned(Stmt::FnDecl(func), location))
     }

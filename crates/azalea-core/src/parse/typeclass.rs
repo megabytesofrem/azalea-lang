@@ -30,7 +30,7 @@ impl<'a> Parser<'a> {
         Ok(spanned(func, location))
     }
 
-    fn parse_type_params(&mut self) -> parser::Return<Vec<String>> {
+    pub(crate) fn parse_type_params(&mut self) -> parser::Return<Vec<String>> {
         let mut type_params = Vec::new();
         self.expect(TokenKind::LSquare)?;
 

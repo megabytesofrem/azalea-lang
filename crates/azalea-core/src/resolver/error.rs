@@ -2,7 +2,10 @@ use crate::{ast::ast_types::Ty, error::error_report::ErrorReport, lexer::SourceL
 
 #[derive(Debug, Clone)]
 pub enum SemanticError {
-    UnificationError(String),
+    UnificationError {
+        message: String,
+        location: SourceLoc,
+    },
 
     UndefinedVariable(String),
     RedefinedVariable(String),
@@ -32,10 +35,10 @@ pub enum SemanticError {
 impl SemanticError {
     pub fn report(&self) -> ErrorReport {
         match self {
-            SemanticError::UnificationError(msg) => ErrorReport::new(
-                format!("Unification error: {}", msg),
+            SemanticError::UnificationError { message, location } => ErrorReport::new(
+                format!("Unification error: {}", message),
                 "Type error".to_string(),
-                SourceLoc::default(),
+                location.clone(),
             ),
 
             SemanticError::UndefinedVariable(name) => ErrorReport::new(

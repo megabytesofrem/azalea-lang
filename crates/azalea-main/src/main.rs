@@ -12,7 +12,7 @@ fn main() {
     let tokens = lex_tokens(&src);
 
     // Debug: print all tokens
-    // println!("All tokens:");
+    println!("All tokens:");
     // for (i, lex_result) in tokens.clone().enumerate() {
     //     match lex_result {
     //         Ok(token) => {
