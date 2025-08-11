@@ -1,0 +1,20 @@
+fn mod(x: Int, y: Int): Int =
+  if y == 0 then 0
+  else 
+    if x < y then x
+    else mod(x - y, y)
+
+-- HACK to define the function `to_string` in scope
+fn to_string(a: Any): Any = do end
+
+fn fizzbuzz(n: Int) = 
+  if mod(n, 15) == 0 then "Fizzbuzz"
+  else if mod(n, 3) == 0 then "Fizz"
+  else if mod(n, 5) == 0 then "Buzz"
+  else to_string(n)
+
+fn main() = do
+  fizzbuzz(3)
+  fizzbuzz(5)
+  fizzbuzz(15)
+end

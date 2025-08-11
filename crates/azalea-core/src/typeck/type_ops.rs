@@ -44,7 +44,7 @@ impl Typechecker {
     /// For example, `forall A. A -> Int` becomes `t0 -> Int
     ///
     pub fn instantiate(&mut self, ty: &Ty) -> Ty {
-        match ty {
+        let ty = match ty {
             Ty::ForAll(vars, inner_ty) => {
                 // `forall A, B. A -> B` becomes `t0 -> t1` where `t0` and `t1` are fresh type variables
                 let mut subst = HashMap::new();
@@ -68,7 +68,15 @@ impl Typechecker {
 
             // For all other cases, we simply return the type as is
             _ => ty.clone(),
-        }
+        };
+
+        println!(
+            "DEBUG: Instantiate type '{}' => {}",
+            ty.pretty(),
+            ty.pretty(),
+        );
+
+        ty
     }
 
     /// This function is similar to `instantiate`, but it substitutes type parameters from a

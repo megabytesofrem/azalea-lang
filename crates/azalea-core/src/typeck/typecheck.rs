@@ -458,6 +458,27 @@ impl Typechecker {
                     local_env.insert(ty_param.clone(), ty_var);
                 }
 
+                // Create the function type early (with potentially unresolved types!)
+                let initial_func_ty = Ty::Fn(Box::new(Function {
+                    name: func_decl.name.clone(),
+                    args: func_decl.args.clone(),
+                    type_params: func_decl.type_params.clone(),
+                    return_ty: func_decl.return_ty.clone(),
+                    body: None,
+                    body_expr: None,
+                    is_extern: false,
+                    extern_name: func_decl.extern_name.clone(),
+                }));
+
+                // Add the function to the local environment for recursive calls
+                local_env.insert(func_decl.name.clone(), initial_func_ty.clone());
+
+                println!(
+                    "DEBUG: Local environment of function '{}': {}",
+                    func_decl.name,
+                    self.pretty_print_env(&local_env)
+                );
+
                 for (arg_name, arg_ty) in &func_decl.args {
                     // Handle types that are unknown for now but can be inferred later
                     // We generate a fresh type variable, marking it as polymorphic

@@ -1,7 +1,7 @@
 extern "console.log" console_log(s: String)
 
 -- Forall quantifier
-fn id(x: A) = x
+fn id[A](x: A) = x
 fn head(xs: Array[A]) = xs.[0]
 fn snd(xs: Array[A]) = xs.[1]
 
@@ -31,3 +31,6 @@ fn make_right[A, B](x: B) = Either { right: x }
 let pair1: Pair[Int, String] = make_pair(1, "hello")
 let left: Either[Int, String] = make_left("Some error message")
 let right: Either[Int, String] = make_right(42)
+
+-- This works but `fn id(x: A) = x` should also work
+id(123)

@@ -24,7 +24,10 @@ impl Typechecker {
             Expr::Literal(lit) => self.infer_literal(lit, env, location.clone()),
             Expr::Ident(name) => {
                 // First check if the variable exists in the resolver (for scope checking)
-                if !self.resolver.is_variable_defined(name) {
+                let defined = self.resolver.is_variable_defined(name)
+                    && !self.resolver.is_function_defined(name);
+
+                if !defined {
                     return Err(SemanticError::UndefinedVariable(name.clone()));
                 }
 
@@ -170,6 +173,10 @@ impl Typechecker {
                         Ty::Fn(func) => {
                             // Handle generic function instantiation
                             let mut instantiation_env = HashMap::new();
+
+                            // Clone the env into the instantiation environment
+                            instantiation_env.extend(env.clone());
+
                             for ty_param in &func.type_params {
                                 // Create a fresh type variable for each type parameter
                                 let fresh_var = self.fresh();
