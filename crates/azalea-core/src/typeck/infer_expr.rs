@@ -257,8 +257,14 @@ impl Typechecker {
                 match target_ty {
                     Ty::TypeCons(name, params) => {
                         println!(
-                            "DEBUG: Member access on TypeCons: '{}' with params: {:?}",
-                            name, params
+                            "DEBUG: Member access on TypeCons: '{}' with params: {{{}}}",
+                            name,
+                            params
+                                .clone()
+                                .into_iter()
+                                .map(|p| p.pretty())
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         );
 
                         if self.type_registry.is_record_defined(&name) {
@@ -550,6 +556,16 @@ impl Typechecker {
     }
 
     fn infer_lam(&mut self, lam: &Expr, env: &mut TypingEnv, location: SourceLoc) -> Return<Ty> {
+        self.infer_lam_with_type(lam, env, location, None)
+    }
+
+    pub fn infer_lam_with_type(
+        &mut self,
+        lam: &Expr,
+        env: &mut TypingEnv,
+        location: SourceLoc,
+        expected_ty: Option<&Ty>,
+    ) -> Return<Ty> {
         if let Expr::Lam {
             args,
             return_ty,
@@ -560,38 +576,81 @@ impl Typechecker {
             self.resolver.push_scope();
 
             let mut arg_types = Vec::new();
-            for (name, ty) in args {
-                self.resolver
-                    .define_variable(name.clone(), ty.clone())
-                    .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
-                arg_types.push((name.clone(), ty.clone()));
-            }
 
-            for (name, ty) in args {
+            // Handle parameter type inference
+            let resolved_args = if let Some(Ty::Fn(expected_func)) = expected_ty {
+                if args.len() != expected_func.args.len() {
+                    return Err(SemanticError::ArityMismatch {
+                        expected: expected_func.args.len(),
+                        found: args.len(),
+                        location: location.clone(),
+                    });
+                }
+
+                // If we have an expected function type, use it to resolve argument types
+                args.iter()
+                    .zip(expected_func.args.iter())
+                    .map(|((name, param_ty), (_, expected_param_ty))| -> Result<(String, Ty), SemanticError> {
+                        match param_ty {
+                            Ty::Unresolved => Ok((name.clone(), expected_param_ty.clone())),
+                            _ => {
+                                // 🚨🚨🚨 FIX: Return the Result from unify and handle it
+                                self.unify(param_ty, expected_param_ty, location.clone())?;
+                                Ok((name.clone(), param_ty.clone()))
+                            }
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                // Handle case where we don't have an expected type
+                args.iter()
+                    .map(|(name, ty)| {
+                        if matches!(ty, Ty::Unresolved) {
+                            let var = Ty::Var(self.fresh());
+                            Ok((name.clone(), var))
+                        } else {
+                            Ok((name.clone(), ty.clone()))
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+
+            // Define variables in the typing environment
+            for (name, ty) in &resolved_args {
+                self.resolver
+                    .define_variable(name.to_string(), ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
+
+                arg_types.push((name.clone(), ty.clone()));
                 env.insert(name.clone(), ty.clone());
             }
 
-            // Unify the return type with the body
+            // Infer the body type and unify with the return type
             let body_ty = self.infer_type(env, &body.target, body.loc.clone())?;
-            let subst = self.unify(&return_ty, &body_ty, location.clone())?;
-            let return_ty = self.hydrate_type(&return_ty, &subst);
-            env.extend(subst);
+            let unified_return_ty = if matches!(return_ty, Ty::Unresolved) {
+                // If the return type is unresolved, we can unify it with the body type
+                body_ty.clone()
+            } else {
+                // Otherwise, unify explicit return type with body type
+                let subst = self.unify(&return_ty, &body_ty, location.clone())?;
+                env.extend(subst);
+                return_ty.clone()
+            };
 
-            // Exit the lambda scope
             self.resolver.pop_scope()?;
 
             let func = Function::new_with_expr(
                 "lambda".to_string(),
-                args.clone(),
-                return_ty.clone(),
+                resolved_args,
+                unified_return_ty,
                 body.clone(),
             );
 
-            // Generalize the lambda type
+            // Generalize the function type if needed
             let func_ty = Ty::Fn(Box::new(func));
-            let general_ty = self.generalize(env, &func_ty);
+            let generalized_ty = self.generalize(env, &func_ty);
 
-            Ok(general_ty)
+            Ok(generalized_ty)
         } else {
             Err(SemanticError::ExpectedLambda { location: location })
         }

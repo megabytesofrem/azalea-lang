@@ -1,4 +1,4 @@
-extern "console.log" console_log(s: String)
+extern fn "console.log" console_log(s: String)
 
 -- Forall quantifier
 fn id[A](x: A) = x
@@ -11,26 +11,19 @@ record Pair[A,B] = {
   second: B
 }
 
--- Either type, lifted from Haskell
-record Either[A, B] = {
-  left: A,
-  right: B
-}
-
 fn main() = do
   console_log("Hello")
 end
 
 fn make_pair[A, B](x: A, y: B) = Pair { first: x, second: y }
-fn make_left[A, B](x: A) = Either { left: x }
-fn make_right[A, B](x: B) = Either { right: x }
-
 
 
 -- Testing it out
 let pair1: Pair[Int, String] = make_pair(1, "hello")
-let left: Either[Int, String] = make_left("Some error message")
-let right: Either[Int, String] = make_right(42)
 
--- This works but `fn id(x: A) = x` should also work
-id(123)
+fn apply[A, B](f: fn(A) -> B, x: A) = f(x)
+fn apply2[A, B, C](f: fn(A, B) -> C, x: A, y: B) = f(x, y)
+
+
+-- fn uncurry(f: fn(A) -> fn(B) -> C): fn(A, B) -> C = \(x) -> \(y) -> f(x)(y)
+fn curry(f: fn(A, B) -> C): fn(A) -> fn(B) -> C = \(x) -> \(y) -> f(x, y)

@@ -10,14 +10,15 @@ use crate::parse::{base as parser, type_};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_typename(&mut self) -> parser::Return<Ty> {
-        self.parse_typename_with_ctx(&HashSet::new())
+        self.parse_primary_type(&HashSet::new())
     }
 
-    pub fn parse_typename_with_ctx(&mut self, type_params: &HashSet<String>) -> parser::Return<Ty> {
+    pub fn parse_primary_type(&mut self, type_params: &HashSet<String>) -> parser::Return<Ty> {
         let token = self.next().ok_or(ParserError::UnexpectedEOF)?;
 
         match token.kind {
             TokenKind::Name => self.parse_name_or_type_with_ctx(token, type_params),
+            TokenKind::KwFn => self.parse_fn_type(type_params),
             t => panic!("Unexpected token for type name: {:?}", t),
         }
     }
@@ -71,7 +72,7 @@ impl<'a> Parser<'a> {
         let mut type_args = Vec::new();
 
         loop {
-            type_args.push(self.parse_typename_with_ctx(type_params)?);
+            type_args.push(self.parse_primary_type(type_params)?);
             if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
                 self.next(); // consume the comma
             } else {
@@ -83,12 +84,10 @@ impl<'a> Parser<'a> {
         Ok(Ty::TypeCons(base_name, type_args))
     }
 
-    fn parse_fn_type(&mut self) -> parser::Return<Ty> {
+    fn parse_fn_type(&mut self, type_params: &HashSet<String>) -> parser::Return<Ty> {
         // fn (int, int) -> int
-        self.check(TokenKind::KwFn)?;
-
         self.expect(TokenKind::LParen)?;
-        let types = self.parse_typename_list()?;
+        let types = self.parse_typename_list(type_params)?;
         self.expect(TokenKind::RParen)?;
         self.expect(TokenKind::Arrow)?;
         let return_ty = self.parse_typename()?;
@@ -108,7 +107,10 @@ impl<'a> Parser<'a> {
         Ok((name, ty))
     }
 
-    pub(crate) fn parse_typename_list(&mut self) -> parser::Return<Vec<Ty>> {
+    pub(crate) fn parse_typename_list(
+        &mut self,
+        typed_params: &HashSet<String>,
+    ) -> parser::Return<Vec<Ty>> {
         let mut types = Vec::new();
 
         loop {
@@ -117,7 +119,7 @@ impl<'a> Parser<'a> {
                 Some(token) if token.kind == TokenKind::RParen => break,
 
                 _ => {
-                    let ty = self.parse_typename()?;
+                    let ty = self.parse_primary_type(typed_params)?;
                     types.push(ty);
 
                     // Expect a comma if there are more types

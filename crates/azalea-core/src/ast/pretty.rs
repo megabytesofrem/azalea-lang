@@ -59,7 +59,7 @@ impl Pretty for Ty {
                     name.clone()
                 } else {
                     let args_str: Vec<String> = args.iter().map(|arg| arg.pretty()).collect();
-                    format!("ᵗ{}[{}]", name, args_str.join(", "))
+                    format!("{}[{}]", name, args_str.join(", "))
                 }
             }
             Ty::Array(ty) => format!("[{}]", ty.pretty()),

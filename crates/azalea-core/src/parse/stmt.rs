@@ -268,7 +268,7 @@ impl<'a> Parser<'a> {
         while self.peek().map(|t| t.kind) != Some(TokenKind::RBrace) {
             let field_name = self.expect(TokenKind::Name)?.literal;
             self.expect(TokenKind::Colon)?;
-            let field_ty = self.parse_typename_with_ctx(&type_param_ctx)?;
+            let field_ty = self.parse_primary_type(&type_param_ctx)?;
 
             record_fields.push((field_name.to_string(), field_ty));
 
@@ -358,7 +358,7 @@ impl<'a> Parser<'a> {
         while self.peek().map(|t| t.kind) != Some(TokenKind::RParen) {
             let name = self.expect(TokenKind::Name)?.literal.to_string();
             self.expect(TokenKind::Colon)?;
-            let ty = self.parse_typename_with_ctx(&type_param_ctx)?;
+            let ty = self.parse_primary_type(&type_param_ctx)?;
             args.push((name, ty));
 
             if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
@@ -371,7 +371,7 @@ impl<'a> Parser<'a> {
 
         let return_ty = if self.peek().map(|t| t.kind) == Some(TokenKind::Colon) {
             self.next();
-            self.parse_typename_with_ctx(&type_param_ctx)?
+            self.parse_primary_type(&type_param_ctx)?
         } else {
             // If no type is specified, we'll figure it out later
             Ty::Unresolved
@@ -399,10 +399,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_extern_decl(&mut self) -> parser::Return<Span<Stmt>> {
-        // extern "js_name" name(args: ty, ...) : ty
+        // extern fn "js_name" name(args: ty, ...) : ty
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwExtern)?;
+        self.expect(TokenKind::KwFn)?;
 
         let extern_name = self.expect(TokenKind::StringLit)?.literal;
 

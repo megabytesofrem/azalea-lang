@@ -314,20 +314,35 @@ impl Typechecker {
             Stmt::Let { name, ty, value } => {
                 let value_ty = match &value.target {
                     Expr::Record(record) => {
-                        // If the value is a record, we need to check that it matches the type
                         self.check_record_against_expected_type(record, &ty, env, location)?
                     }
-
+                    Expr::Lam { .. } => {
+                        // If type annotation is provided, use it as expected type
+                        if *ty != Ty::Unresolved {
+                            self.infer_lam_with_type(&value.target, env, location, Some(&ty))?
+                        } else {
+                            // No type annotation: infer most general type
+                            self.infer_lam_with_type(&value.target, env, location, None)?
+                        }
+                    }
                     _ => self.infer_type(env, &value.target, value.loc.clone())?,
                 };
-                let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
 
-                env.extend(local_subst);
+                // If type annotation is provided, unify; otherwise, just use inferred type
+                let final_ty = if *ty != Ty::Unresolved {
+                    let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
+                    env.extend(local_subst);
+                    ty.clone()
+                } else {
+                    value_ty.clone()
+                };
 
-                // Add the variable to both the resolver (for scope management) and typing environment (for type tracking)
+                // Generalize the type before inserting into the environment
+                let generalized_ty = self.generalize(env, &final_ty);
                 self.resolver
-                    .define_or_redefine_variable(name.clone(), ty.clone());
-                env.insert(name.clone(), ty.clone());
+                    .define_or_redefine_variable(name.clone(), generalized_ty.clone());
+                env.insert(name.clone(), generalized_ty);
+
                 Ok(())
             }
 
