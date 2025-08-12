@@ -4,6 +4,8 @@ extern fn "Math.sqrt" math_sqrt(x: Float): Float
 extern fn "Math.abs" math_abs(x: Float): Float
 extern fn "Math.random" math_random(): Float
 
+-- Enums are not (yet) sum types, but like C enums
+enum Color = { red, green, blue }
 
 fn main() = do
   console_log("Hello, Azalea!")
@@ -20,6 +22,16 @@ fn main() = do
   --     else to_string(0)
 
   console_log("The result is: " + result)
+  let a_color = Color.red
+
+  if a_color == Color.red then
+    console_log("The color is Red")
+  else if a_color == Color.green then
+    console_log("The color is Green")
+  else if a_color == Color.blue then
+    console_log("The color is Blue")
+  else
+    console_log("Unknown color")
 end
 
 -- Example of a function that uses math functions

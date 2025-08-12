@@ -312,15 +312,18 @@ impl Emit for JSCodegen {
             }
 
             Stmt::EnumDecl(enum_decl) => {
-                let variants: Vec<String> = enum_decl
+                // Format { name: variant } for each variant
+                let variant_map: Vec<String> = enum_decl
                     .variants
                     .iter()
-                    .map(|variant| format!("\"{}\"", variant))
+                    .enumerate()
+                    .map(|(i, variant)| format!("{}: {}", variant, i))
                     .collect();
+
                 format!(
                     "const /*enum*/ {} = {{ {} }};",
                     enum_decl.name,
-                    variants.join(", ")
+                    variant_map.join(", ")
                 )
             }
 

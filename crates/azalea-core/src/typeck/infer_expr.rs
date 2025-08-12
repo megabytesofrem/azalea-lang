@@ -34,6 +34,12 @@ impl Typechecker {
                         return Ok(Ty::Fn(Box::new(extern_decl.clone())));
                     }
 
+                    if self.global_env.is_enum_defined(name) {
+                        // If it's an enum, we can return the enum type directly
+                        let enum_ty = self.global_env.lookup_enum(name).unwrap();
+                        return Ok(enum_ty.to_type());
+                    }
+
                     return Err(SemanticError::UndefinedVariable(name.clone()));
                 }
 

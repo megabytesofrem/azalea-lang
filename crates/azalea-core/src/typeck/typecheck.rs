@@ -11,7 +11,7 @@ use crate::resolver::error::SemanticError;
 use crate::resolver::resolver::Resolver;
 
 use crate::resolver::Return;
-use crate::typeck::type_registry::GlobalEnv;
+use crate::typeck::global_env::GlobalEnv;
 
 /// A typing environment is a mapping from type variables to types.
 pub type TypingEnv = HashMap<String, Ty>;
@@ -457,7 +457,17 @@ impl Typechecker {
                 env.extend(local_env);
 
                 // Add the enum to the environment
+
+                self.global_env.define_enum(enum_decl.clone());
                 env.insert(enum_decl.name.clone(), ty.clone());
+
+                // // Add all fields of the enum to the environment
+                // for variant_name in &enum_decl.variants {
+                //     // Each variant is a type constructor with no parameters
+                //     let variant_ty = Ty::TypeCons(variant_name.clone(), vec![]);
+                //     env.insert(format!("{}.{}", enum_decl.name, variant_name), variant_ty);
+                // }
+
                 Ok(())
             }
 
