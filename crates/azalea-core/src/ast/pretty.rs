@@ -67,7 +67,13 @@ impl Pretty for Ty {
                 let args_str: Vec<String> = func
                     .args
                     .iter()
-                    .map(|(name, ty)| format!("{}: {}", name, ty.pretty()))
+                    .map(|(name, ty)| {
+                        format!(
+                            "{}: {}",
+                            if !name.is_empty() { name } else { "_" },
+                            ty.pretty()
+                        )
+                    })
                     .collect();
 
                 let return_ty_str = func.return_ty.pretty();
@@ -162,7 +168,7 @@ impl Pretty for Expr {
                 let args_str: Vec<String> = args.iter().map(|arg| arg.clone().0).collect();
                 let return_ty_str = format!(" -> {}", return_ty.pretty());
                 format!(
-                    "fn({}){} {{ {} }}",
+                    "fn({}){} = {}",
                     args_str.join(", "),
                     return_ty_str,
                     body.target.pretty()

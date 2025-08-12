@@ -11,7 +11,7 @@ use crate::resolver::error::SemanticError;
 use crate::resolver::resolver::Resolver;
 
 use crate::resolver::Return;
-use crate::typeck::type_registry::TypeRegistry;
+use crate::typeck::type_registry::GlobalEnv;
 
 /// A typing environment is a mapping from type variables to types.
 pub type TypingEnv = HashMap<String, Ty>;
@@ -28,7 +28,7 @@ pub struct Typechecker {
     next_var: usize,
 
     pub resolver: Resolver,
-    pub type_registry: TypeRegistry,
+    pub global_env: GlobalEnv,
 
     /// During type checking, we collect errors and bubble them up
     pub errors: Vec<SemanticError>,
@@ -39,7 +39,7 @@ impl Typechecker {
         Self {
             next_var: 0,
             resolver: Resolver::new(),
-            type_registry: TypeRegistry::new(),
+            global_env: GlobalEnv::new(),
             errors: Vec::new(),
         }
     }
@@ -158,7 +158,7 @@ impl Typechecker {
             }
 
             (Ty::TypeCons(ty_name1, params1), Ty::TypeCons(ty_name2, params2))
-                if ty_name1 == ty_name2 && self.type_registry.is_record_defined(ty_name1) =>
+                if ty_name1 == ty_name2 && self.global_env.is_record_defined(ty_name1) =>
             {
                 if params1.len() != params2.len() {
                     return Err(SemanticError::TypeMismatch {
@@ -241,7 +241,7 @@ impl Typechecker {
         };
 
         println!(
-            "DEBUG: Unifying {} with {}=> {}",
+            "DEBUG: Unifying {} with {} ⟹  {}",
             t1.pretty(),
             t2.pretty(),
             self.pretty_print_env(&map.clone()?),
@@ -284,7 +284,7 @@ impl Typechecker {
 
             Stmt::ExternDecl(extern_func) => {
                 // Store the extern function in the type registry
-                self.type_registry.define_extern(extern_func.clone());
+                self.global_env.define_extern(extern_func.clone());
 
                 let func = Function {
                     name: extern_func.name.clone(),
@@ -432,11 +432,11 @@ impl Typechecker {
                 let local_subst = self.unify(&ty, &record.to_type(), stmt.loc.clone())?;
                 env.extend(local_subst);
 
-                println!(
-                    "DEBUG: Defining record {} with type {}",
-                    record.name,
-                    ty.pretty()
-                );
+                // println!(
+                //     "DEBUG: Defining record {} with type {}",
+                //     record.name,
+                //     ty.pretty()
+                // );
 
                 let record_decl = Record {
                     name: record.name.clone(),
@@ -444,7 +444,7 @@ impl Typechecker {
                     fields: record.fields.clone(),
                 };
 
-                self.type_registry.define_record(record_decl);
+                self.global_env.define_record(record_decl);
 
                 // Add the record to the environment
                 env.insert(record.name.clone(), ty.clone());
@@ -488,11 +488,11 @@ impl Typechecker {
                 // Add the function to the local environment for recursive calls
                 local_env.insert(func_decl.name.clone(), initial_func_ty.clone());
 
-                println!(
-                    "DEBUG: Local environment of function '{}': {}",
-                    func_decl.name,
-                    self.pretty_print_env(&local_env)
-                );
+                // println!(
+                //     "DEBUG: Local environment of function '{}': {}",
+                //     func_decl.name,
+                //     self.pretty_print_env(&local_env)
+                // );
 
                 for (arg_name, arg_ty) in &func_decl.args {
                     // Handle types that are unknown for now but can be inferred later
@@ -568,16 +568,16 @@ impl Typechecker {
                 // Debug print
                 let generalize_ty = self.generalize(&env, &func_ty);
                 println!(
-                    "DEBUG: Generalize function '{}' => {}",
+                    "DEBUG: Generalize function '{}' ⟹  {}",
                     func_decl.name.clone(),
                     generalize_ty.pretty(),
                 );
 
                 // Add the function to both the resolver and typing environment
                 self.resolver
-                    .define_function(func_decl.name.clone(), func_ty.clone())
+                    .define_function(func_decl.name.clone(), generalize_ty.clone())
                     .map_err(|_| SemanticError::RedefinedVariable(func_decl.name.clone()))?;
-                env.insert(func_decl.name.clone(), func_ty);
+                env.insert(func_decl.name.clone(), generalize_ty);
 
                 Ok(())
             }

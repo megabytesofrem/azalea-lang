@@ -24,10 +24,16 @@ impl Typechecker {
             Expr::Literal(lit) => self.infer_literal(lit, env, location.clone()),
             Expr::Ident(name) => {
                 // First check if the variable exists in the resolver (for scope checking)
-                let defined = self.resolver.is_variable_defined(name)
-                    && !self.resolver.is_function_defined(name);
+                let is_variable = self.resolver.is_variable_defined(name);
+                let is_function = self.resolver.is_function_defined(name);
 
-                if !defined {
+                if !is_variable && !is_function {
+                    // Handle extern functions
+                    if self.global_env.is_extern_function(name) {
+                        let extern_decl = self.global_env.lookup_extern_function(name).unwrap();
+                        return Ok(Ty::Fn(Box::new(extern_decl.clone())));
+                    }
+
                     return Err(SemanticError::UndefinedVariable(name.clone()));
                 }
 
@@ -37,8 +43,8 @@ impl Typechecker {
                     self.resolver.scope_depth()
                 );
 
-                if self.type_registry.is_record_defined(name) {
-                    let record_ty = self.type_registry.lookup_record(name).unwrap();
+                if self.global_env.is_record_defined(name) {
+                    let record_ty = self.global_env.lookup_record(name).unwrap();
                     return Ok(record_ty.to_type());
                 }
 
@@ -48,7 +54,6 @@ impl Typechecker {
                     .cloned()
                     .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
 
-                self.hydrate_type(&ty, env);
                 Ok(self.instantiate(&ty))
             }
 
@@ -121,105 +126,50 @@ impl Typechecker {
                 }
             }
 
-            Expr::FnCall { target, args } => match &target.target {
-                Expr::Ident(name) => {
-                    // Check if the function is an `extern` function first
-                    if self.type_registry.is_extern_function(name) {
-                        // If it's an extern function, we need to look it up in the type registry
-                        let extern_decl = self
-                            .type_registry
-                            .lookup_extern_function(name)
-                            .unwrap()
-                            .clone();
+            Expr::FnCall { target, args } => {
+                // Infer the type of the function expression (could be a variable, lambda, or another pipeline)
+                let func_ty = self.infer_type(env, &target.target, target.loc.clone())?;
 
-                        // Type check arguments against the extern function signature
-                        if args.len() != extern_decl.args.len() {
+                // For function types, check argument count and types
+                match func_ty {
+                    Ty::Fn(func) => {
+                        if args.len() != func.args.len() {
                             return Err(SemanticError::ArityMismatch {
-                                expected: extern_decl.args.len(),
+                                expected: func.args.len(),
                                 found: args.len(),
                                 location: target.loc.clone(),
                             });
                         }
 
-                        // Type check each argument
-                        for (arg, (_, expected_ty)) in args.iter().zip(extern_decl.args.iter()) {
+                        // Instantiate generics if needed
+                        let mut instantiation_env = HashMap::new();
+                        for ty_param in &func.type_params {
+                            let fresh_var = self.fresh();
+                            instantiation_env.insert(ty_param.clone(), Ty::Var(fresh_var));
+                        }
+                        let instantiated_arg_types = func
+                            .args
+                            .iter()
+                            .map(|(_, ty)| self.instantiate_type(ty, &instantiation_env))
+                            .collect::<Vec<_>>();
+                        let instantiated_return_ty =
+                            self.instantiate_type(&func.return_ty, &instantiation_env);
+
+                        for (arg, expected_ty) in args.iter().zip(instantiated_arg_types.iter()) {
                             let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
                             let subst = self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
                             env.extend(subst);
                         }
 
-                        println!(
-                            "DEBUG: Extern function call: {} with args: {:?}",
-                            name,
-                            extern_decl
-                                .args
-                                .iter()
-                                .map(|(_, ty)| ty.pretty())
-                                .collect::<Vec<_>>()
-                        );
-
-                        // Return the return type of the extern function
-                        return Ok(extern_decl.return_ty.clone());
+                        Ok(instantiated_return_ty)
                     }
 
-                    // Otherwise, handle it as a regular function call
-
-                    let func_ty = env
-                        .get(name)
-                        .cloned()
-                        .ok_or_else(|| SemanticError::UndefinedFunction(name.clone()))?;
-
-                    match func_ty {
-                        Ty::Fn(func) => {
-                            // Handle generic function instantiation
-                            let mut instantiation_env = HashMap::new();
-
-                            // Clone the env into the instantiation environment
-                            instantiation_env.extend(env.clone());
-
-                            for ty_param in &func.type_params {
-                                // Create a fresh type variable for each type parameter
-                                let fresh_var = self.fresh();
-                                instantiation_env.insert(ty_param.clone(), Ty::Var(fresh_var));
-                            }
-
-                            let instantiated_arg_types = func
-                                .args
-                                .iter()
-                                .map(|(_, ty)| self.instantiate_type(ty, &instantiation_env))
-                                .collect::<Vec<_>>();
-
-                            let instantiated_return_ty =
-                                self.instantiate_type(&func.return_ty, &instantiation_env);
-
-                            // Type check arguments
-                            if args.len() != func.args.len() {
-                                return Err(SemanticError::ArityMismatch {
-                                    expected: func.args.len(),
-                                    found: args.len(),
-                                    location: target.loc.clone(),
-                                });
-                            }
-
-                            for (arg, expected_ty) in args.iter().zip(instantiated_arg_types.iter())
-                            {
-                                let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
-                                let subst = self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
-                                env.extend(subst);
-                            }
-
-                            Ok(instantiated_return_ty)
-                        }
-
-                        // TODO: Add support for `foo[0](a, b)` syntax
-                        _ => todo!("Complex function call handling not implemented yet"),
-                    }
+                    _ => panic!(
+                        "Expected a function type for function call, found: {}",
+                        func_ty.pretty_with_loc(&location),
+                    ),
                 }
-                e => todo!(
-                    "Complex function call handling not implemented yet: {:?}",
-                    e
-                ),
-            },
+            }
 
             Expr::If { cond, then, else_ } => {
                 // Infer the condition type
@@ -253,8 +203,8 @@ impl Typechecker {
                 let target_ty =
                     self.infer_type(env, &member.target.target, member.target.loc.clone())?;
 
-                // Check if the target type is a record or an enum
                 match target_ty {
+                    // Both records and enums are represented nominally as `TypeCons`
                     Ty::TypeCons(name, params) => {
                         println!(
                             "DEBUG: Member access on TypeCons: '{}' with params: {{{}}}",
@@ -267,8 +217,8 @@ impl Typechecker {
                                 .join(", ")
                         );
 
-                        if self.type_registry.is_record_defined(&name) {
-                            let record = self.type_registry.lookup_record(&name).unwrap();
+                        if self.global_env.is_record_defined(&name) {
+                            let record = self.global_env.lookup_record(&name).unwrap();
                             println!(
                                 "DEBUG: Found record '{}' with fields: {{{}}}",
                                 record.name,
@@ -337,6 +287,31 @@ impl Typechecker {
                                     location: member.target.loc.clone(),
                                 })
                             }
+                        } else if self.global_env.is_enum_defined(&name) {
+                            // Enums are handled similar to records, but (for now) are simpler as they are
+                            // not sum types *this will change*
+
+                            let enum_ty = self.global_env.lookup_enum(&name).unwrap();
+                            // println!(
+                            //     "DEBUG: Found enum '{}' with variants: {{{}}}",
+                            //     enum_ty.name,
+                            //     enum_ty
+                            //         .variants
+                            //         .iter()
+                            //         .map(|v| v.to_string())
+                            //         .collect::<Vec<_>>()
+                            //         .join(", ")
+                            // );
+
+                            if enum_ty.variants.contains(&member.name) {
+                                Ok(enum_ty.to_type())
+                            } else {
+                                Err(SemanticError::UndefinedFieldOrVariant {
+                                    field: member.name.clone(),
+                                    structure: name,
+                                    location: member.target.loc.clone(),
+                                })
+                            }
                         } else {
                             println!("DEBUG: Record {} not found in resolver", name);
                             Err(SemanticError::UndefinedFieldOrVariant {
@@ -346,20 +321,6 @@ impl Typechecker {
                             })
                         }
                     }
-
-                    // Ty::Enum(enum_ty) => {
-                    //     // For enums, we need to check if the field is a variant
-                    //     if enum_ty.variants.contains(&member.name) {
-                    //         Ok(enum_ty.to_type())
-                    //     } else {
-                    //         Err(SemanticError::UndefinedFieldOrVariant {
-                    //             field: member.name.clone(),
-                    //             structure: enum_ty.name.clone(),
-                    //             location: member.target.loc.clone(),
-                    //         })
-                    //     }
-                    // }
-
                     // TODO: Change to expected one of many
                     _ => Err(SemanticError::TypeMismatch {
                         expected: Ty::Any,
@@ -376,7 +337,7 @@ impl Typechecker {
             // Only print debug information for certain expressions
             Expr::Lam { .. } => {
                 println!(
-                    "DEBUG: Infer type for lambda: {} => {}, Γ: {}",
+                    "DEBUG: Infer type for lambda: {} ⟹  {}, Γ: {}",
                     expr.pretty(),
                     inferred_ty.clone()?.pretty_with_loc(&location),
                     self.pretty_print_env(env),
@@ -385,7 +346,7 @@ impl Typechecker {
 
             Expr::FnCall { .. } => {
                 println!(
-                    "DEBUG: Infer type for expr: {} => {}, Γ: {}",
+                    "DEBUG: Infer type for expr: {} ⟹  {}, Γ: {}",
                     expr.pretty(),
                     inferred_ty.clone()?.pretty_with_loc(&location),
                     self.pretty_print_env(env),
@@ -423,14 +384,14 @@ impl Typechecker {
         // we need to infer the types of each field expression and construct
         // a record type from those inferred types
 
-        if !self.type_registry.is_record_defined(&record_expr.name) {
+        if !self.global_env.is_record_defined(&record_expr.name) {
             return Err(SemanticError::UndefinedVariable(
                 record_expr.name.to_string(),
             ));
         }
 
         let record_decl = self
-            .type_registry
+            .global_env
             .lookup_record(&record_expr.name)
             .unwrap()
             .clone();
@@ -501,7 +462,7 @@ impl Typechecker {
     ) -> Return<Ty> {
         // Get record definition
         let record_decl = self
-            .type_registry
+            .global_env
             .lookup_record(&record_expr.name)
             .ok_or_else(|| SemanticError::UndefinedVariable(record_expr.name.clone()))?
             .clone();
@@ -594,7 +555,6 @@ impl Typechecker {
                         match param_ty {
                             Ty::Unresolved => Ok((name.clone(), expected_param_ty.clone())),
                             _ => {
-                                // 🚨🚨🚨 FIX: Return the Result from unify and handle it
                                 self.unify(param_ty, expected_param_ty, location.clone())?;
                                 Ok((name.clone(), param_ty.clone()))
                             }

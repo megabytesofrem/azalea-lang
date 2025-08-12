@@ -3,10 +3,9 @@ use std::collections::HashMap;
 use crate::ast::ast_types::{Enum, Function, Record};
 use crate::resolver::error::SemanticError;
 
-/// TypeRegistry manages the registration and lookup of record and enum types
-/// during the typechecking phase.
+/// Global environment for type checking and resolution.
 #[derive(Debug, Clone)]
-pub struct TypeRegistry {
+pub struct GlobalEnv {
     pub records: HashMap<String, Record>,
     pub enums: HashMap<String, Enum>,
 
@@ -14,9 +13,9 @@ pub struct TypeRegistry {
     pub js_extern_functions: HashMap<String, Function>,
 }
 
-impl TypeRegistry {
+impl GlobalEnv {
     pub fn new() -> Self {
-        TypeRegistry {
+        GlobalEnv {
             records: HashMap::new(),
             enums: HashMap::new(),
             js_extern_functions: HashMap::new(),

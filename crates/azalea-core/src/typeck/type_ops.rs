@@ -24,13 +24,25 @@ impl Typechecker {
                 vars
             }
 
-            Ty::TypeCons(_name, type_params) => {
-                // TypeCons now represents only actual type constructors like records/enums
-                // Type parameters are represented as Ty::Var instead
-                type_params
-                    .iter()
-                    .flat_map(|ty| self.find_free_type_vars(ty))
-                    .collect::<HashSet<_>>()
+            Ty::TypeCons(name, type_params) => {
+                // TypeCons with no parameters might be type parameters (like A, B, C)
+                // TypeCons with parameters are actual type constructors like records/enums
+                let mut vars = HashSet::new();
+
+                if type_params.is_empty() {
+                    // This might be a type parameter like A, B, C
+                    vars.insert(name.clone());
+                } else {
+                    // Recurse into the type parameters
+                    vars.extend(
+                        type_params
+                            .iter()
+                            .flat_map(|ty| self.find_free_type_vars(ty))
+                            .collect::<HashSet<_>>(),
+                    );
+                }
+
+                vars
             }
 
             // All other types are concrete and have no free variables
@@ -71,7 +83,7 @@ impl Typechecker {
         };
 
         println!(
-            "DEBUG: Instantiate type '{}' => {}",
+            "DEBUG: Instantiate type '{}' ⟹  {}",
             ty.pretty(),
             ty.pretty(),
         );
@@ -110,7 +122,7 @@ impl Typechecker {
         };
 
         println!(
-            "DEBUG: Instantiate type '{}' with {} => {}",
+            "DEBUG: Instantiate type '{}' with {} ⟹  {}",
             ty.pretty(),
             self.pretty_print_env(instantiation_env),
             instantiated.pretty()
@@ -145,17 +157,22 @@ impl Typechecker {
     }
 
     pub fn pretty_print_env(&self, map: &TypingEnv) -> String {
-        let mut result = String::new();
-        result.push_str("Γ{");
+        let num_entries = map.len();
 
-        let entries: Vec<String> = map
-            .iter()
-            .map(|(var, ty)| format!("{} := {}", var, ty.pretty()))
-            .collect();
-
-        result.push_str(&entries.join(", "));
-        result.push_str("}");
-        result
+        if num_entries >= 2 {
+            let entries: Vec<String> = map
+                .iter()
+                .enumerate()
+                .map(|(i, (var, ty))| format!("\t{}. {} := {}", i + 1, var, ty.pretty()))
+                .collect();
+            format!("\n{}", entries.join("\n"))
+        } else {
+            let entries: Vec<String> = map
+                .iter()
+                .map(|(var, ty)| format!("{} := {}", var, ty.pretty()))
+                .collect();
+            format!("{{ {} }}", entries.join(", "))
+        }
     }
 
     /// Generalize a type by universally quantifying free type variables.
