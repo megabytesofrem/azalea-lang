@@ -1,35 +1,15 @@
--- extern fn "console.log" console_log(s: String)
-
--- -- Forall quantifier
--- fn id[A](x: A) = x
--- fn head(xs: Array[A]) = xs.[0]
--- fn snd(xs: Array[A]) = xs.[1]
-
--- -- Pair type
--- record Pair[A,B] = {
---   first: A,
---   second: B
--- }
-
--- fn main() = do
---   console_log("Hello")
--- end
-
--- fn make_pair[A, B](x: A, y: B) = Pair { first: x, second: y }
-
-
--- -- Testing it out
--- let pair1: Pair[Int, String] = make_pair(1, "hello")
-
--- fn apply[A, B](f: fn(A) -> B, x: A) = f(x)
--- fn apply2[A, B, C](f: fn(A, B) -> C, x: A, y: B) = f(x, y)
-
+extern fn "Array.prototype.push" js_array_push[A](arr: Array[A], item: A): Int
+extern fn "Array.prototype.map" js_array_map[A, B](arr: Array[A], f: fn(A) -> B): Array[B]
+extern fn "Array.prototype.filter" js_array_filter[A](arr: Array[A], f: fn(A) -> Bool): Array[A]
+extern fn "Array.prototype.reduce" js_array_reduce[A, B](arr: Array[A], f: fn(B, A) -> B, initial: B): B
 
 fn curry(f: fn(A, B) -> C): fn(A) -> fn(B) -> C = \(x) -> \(y) -> f(x, y)
 fn uncurry(f: fn(A) -> fn(B) -> C): fn(A, B) -> C = \(x, y) -> f(x)(y)
 
-let add: fn(Int, Int) -> Int = \(x, y) -> x + y
-let add_curry = curry(add)
+fn map_filter_greater_two[A](arr: Array[A]) = 
+  js_array_filter(
+    js_array_map(arr, \(x) -> x + 1),
+    \(x) -> x > 2
+  )
 
-add_curry(1)(2)
-uncurry(add_curry)(1, 2)
+map_filter_greater_two([1, 2, 3, 4, 5])

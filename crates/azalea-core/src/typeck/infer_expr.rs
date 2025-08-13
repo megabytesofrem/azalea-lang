@@ -97,8 +97,12 @@ impl Typechecker {
 
                 // Unify all the element types with the first type
                 let first_ty = element_types.first().cloned().unwrap_or(Ty::Unit);
-                for ty in &element_types[1..] {
-                    self.unify(&first_ty, ty, location.clone())?;
+
+                if elements.len() > 1 {
+                    // If there are multiple elements, we need to ensure they all have the same type
+                    for ty in &element_types[1..] {
+                        self.unify(&first_ty, ty, location.clone())?;
+                    }
                 }
 
                 Ok(Ty::TypeCons("Array".to_string(), vec![first_ty]))

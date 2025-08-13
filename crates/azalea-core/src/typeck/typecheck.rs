@@ -532,6 +532,11 @@ impl Typechecker {
                 // For now, this only supports arrays as iterables
                 let iterable_elem_ty = match iterable_ty {
                     Ty::Array(inner) => *inner,
+                    Ty::TypeCons(ctor, params) if ctor == "Array" && params.len() == 1 => {
+                        // If the iterable is a type constructor for an array, we can extract the element type
+                        params[0].clone()
+                    }
+
                     _ => {
                         return Err(SemanticError::TypeMismatch {
                             expected: Ty::Array(Box::new(Ty::Unresolved)),

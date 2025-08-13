@@ -91,6 +91,7 @@ impl JSCodegen {
             .iter()
             .filter_map(|span| match &span.target {
                 ToplevelStmt::FnDecl(func) if func.name == name => Some(func.clone()),
+                ToplevelStmt::ExternDecl(func) if func.name == name => Some(func.clone()), // ADD THIS LINE
                 _ => None,
             })
             .next()
@@ -116,23 +117,95 @@ impl JSCodegen {
         }
     }
 
+    fn generate_extern_call(&mut self, extern_name: &str, args: &[Span<Expr>]) -> String {
+        // Check if this is a prototype method: "Type.prototype.method"
+        if let Some(method_name) = self.extract_prototype_method(extern_name) {
+            return self.generate_prototype_call(&method_name, args);
+        }
+
+        // Handle other extern patterns
+        match extern_name {
+            "console.log" => {
+                let args_str = args
+                    .iter()
+                    .map(|arg| self.visit_expr(&arg.target))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("console.log({})", args_str)
+            }
+            "Math.sqrt" | "Math.abs" | "Math.random" => {
+                let args_str = args
+                    .iter()
+                    .map(|arg| self.visit_expr(&arg.target))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", extern_name, args_str)
+            }
+            _ => {
+                // Fallback to regular function call
+                let args_str = args
+                    .iter()
+                    .map(|arg| self.visit_expr(&arg.target))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", extern_name, args_str)
+            }
+        }
+    }
+
+    fn extract_prototype_method(&self, extern_name: &str) -> Option<String> {
+        // Match pattern "*.prototype.*"
+        if let Some(prototype_pos) = extern_name.find(".prototype.") {
+            let method_start = prototype_pos + ".prototype.".len();
+            if method_start < extern_name.len() {
+                return Some(extern_name[method_start..].to_string());
+            }
+        }
+        None
+    }
+
+    fn generate_prototype_call(&mut self, method_name: &str, args: &[Span<Expr>]) -> String {
+        if args.is_empty() {
+            panic!(
+                "Prototype method '{}' expects at least one argument (the receiver)",
+                method_name
+            );
+        }
+
+        // First argument is the receiver (the object to call the method on)
+        let receiver = self.visit_expr(&args[0].target);
+
+        // Remaining arguments are the method arguments
+        let method_args: Vec<String> = args[1..]
+            .iter()
+            .map(|arg| self.visit_expr(&arg.target))
+            .collect();
+
+        if method_args.is_empty() {
+            // HACK: Remove the trailing quote from method names, need a better way
+            format!(
+                "{}.{}()",
+                receiver,
+                method_name.strip_suffix('"').unwrap_or(method_name)
+            )
+        } else {
+            format!(
+                "{}.{}({})",
+                receiver,
+                method_name.strip_suffix('"').unwrap_or(method_name),
+                method_args.join(", ")
+            )
+        }
+    }
+
     fn visit_function_call(&mut self, target: &Expr, args: Vec<Span<Expr>>) -> String {
         if let Expr::Ident(name) = target {
             // Check if the function is an extern function
             if let Some(func) = self.lookup_function(name) {
                 if func.is_extern {
-                    let extern_name = func
-                        .extern_name
-                        .as_ref()
-                        .expect("Extern function missing extern_name")
-                        .trim_matches('"');
+                    println!("DEBUG: Codegen: Extern function call: {}", name);
 
-                    let args_emit: Vec<String> = args
-                        .iter()
-                        .map(|arg| self.visit_expr(&arg.target))
-                        .collect();
-
-                    return format!("{}({})", extern_name, args_emit.join(", "));
+                    return self.generate_extern_call(&func.extern_name.unwrap(), &args);
                 }
             }
 
@@ -212,6 +285,10 @@ impl Emit for JSCodegen {
                 format!("{}[{}]", target_emit, index_emit)
             }
             Expr::FnCall { target, args } => {
+                println!(
+                    "DEBUG: Codegen: Visit Function call: {}",
+                    target.target.pretty()
+                );
                 self.visit_function_call(&target.target, args.to_vec())
             }
             Expr::Lam {

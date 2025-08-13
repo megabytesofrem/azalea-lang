@@ -34,6 +34,12 @@ fn main() = do
     console_log("Unknown color")
 end
 
+fn print_array[A](arr: Array[A]) = do
+  for i in arr do
+    console_log("Element: " + i)
+  end
+end
+
 -- Example of a function that uses math functions
 fn calc_square_root(x: Float): Float =
   if x < 0.0
