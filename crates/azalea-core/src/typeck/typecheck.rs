@@ -316,12 +316,20 @@ impl Typechecker {
 
                 let func_ty = Ty::Fn(Box::new(func));
 
+                // Generalize the extern function type (same as regular functions)
+                let generalize_ty = self.generalize(&env, &func_ty);
+                println!(
+                    "DEBUG: Generalize extern function '{}' ⟹  {}",
+                    extern_func.name.clone(),
+                    generalize_ty.pretty(),
+                );
+
                 // Add the function to the resolver (for scope management) and typing environment (for type tracking)
                 self.resolver
-                    .define_function(extern_func.name.clone(), func_ty.clone())
+                    .define_function(extern_func.name.clone(), generalize_ty.clone())
                     .map_err(|_| SemanticError::RedefinedVariable(extern_func.name.clone()))?;
 
-                env.insert(extern_func.name.clone(), func_ty);
+                env.insert(extern_func.name.clone(), generalize_ty);
 
                 Ok(())
             }
