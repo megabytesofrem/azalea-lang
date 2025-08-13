@@ -1,6 +1,6 @@
 # Azalea
 
-Toy language written in Rust that compiles to Javascript.
+Small language inspired by Haskell and Lua, that compiles to JS.
 
 ## Status
 

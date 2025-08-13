@@ -33,11 +33,21 @@ The main intention of this paper is to serve as a form of documentation for myse
 == Haskell Syntax: A quick primer
 If you are not familiar with Haskell syntax, here is a quick primer on the syntax used in this paper.
 
-- `forall a. a → a` is a polymorphic type, meaning it can work with any type _a_. It is equivalent to `∀a. a → a`.
+#block(
+  inset: 8pt,
+  fill: rgb("#fff6da"),
+  width: 100%,
+  stroke: black,
+  [
+    - `forall a. a → a` is a polymorphic type, meaning it can work with any type _a_. It is equivalent to `∀a. a → a`.
 
-- `id : forall a. a → a` is a function declaration noting that `id` is a polymorphic function that takes one argument of type _a_ and returns a value of the same type _a_. It is equivalent to `id : ∀a. a → a`.
+    - `id : forall a. a → a` is a function declaration noting that `id` is a polymorphic function that takes one argument of type _a_ and returns a value of the same type _a_. It is equivalent to `id : ∀a. a → a`.
 
-- `List a` is a type constructor that takes a type _a_ and returns a new type.
+    - `List a` is a type constructor that takes a type _a_ and returns a new type.
+
+  ],
+)
+
 
 #pagebreak()
 
@@ -94,22 +104,30 @@ Suppose we have `head` : #forall("a", "List[a] → a").
 
 When head is used with a list of integers:
 
-1. The environment contains:
-- `head` : #forall("a", "List[a] → a") (polymorphic function)
-- _t0_ : `Int` (type variable for the argument)
+#block(
+  inset: 8pt,
+  fill: rgb("#fff6da"),
+  width: 100%,
+  stroke: black,
+  [
+    The environment contains:
+    - `head` : #forall("a", "List[a] → a") (polymorphic function)
+    - _t0_ : `Int` (type variable for the argument)
+  ],
+)
 
-2. Instantiation:
+1. Instantiation:
   The type variable _t0_ is instantiated to `Int`, resulting in the type `head` : `List[Int] → Int`.
 
-3. Inference:
+2. Inference:
   When we call `head([1, 2, 3])`, the type checker checks the argument against the type of `head`.
 
   It infers that the argument is a `List[Int]` and it returns an `Int`.
 
-4. Unification:
+3. Unification:
   The type checker unifies `List[t1]` with `List[Int]` which means _t1_ $eq$ `Int`.
 
-5. Substitution:
+4. Substitution:
   The type variable _t1_ is substituted with the final type `Int`.
 
 #pagebreak()
