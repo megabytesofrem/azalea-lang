@@ -6,6 +6,9 @@ use crate::{lexer::Op, parse::span::Span};
 /// A block of statements delimited by `do` and `end`
 pub type Block = Vec<Span<Stmt>>;
 
+/// The root of the AST where the parser should start parsing from.
+pub type ParseRoot = Vec<Span<ToplevelStmt>>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Int(i32),
@@ -18,6 +21,23 @@ pub enum Literal {
 pub struct Member {
     pub target: Box<Span<Expr>>,
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToplevelStmt {
+    Stmt(Span<Stmt>),
+
+    /// A record declaration
+    RecordDecl(Record),
+
+    /// An enum declaration
+    EnumDecl(Enum),
+
+    /// An `extern` declaration for a JavaScript function
+    /// This is used to bind JavaScript functions to Azalea functions.
+    ExternDecl(Function),
+
+    FnDecl(Function),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,18 +74,6 @@ pub enum Stmt {
         cond: Box<Span<Expr>>,
         body: Vec<Span<Stmt>>,
     },
-
-    /// A record declaration
-    RecordDecl(Record),
-
-    EnumDecl(Enum),
-
-    /// An `extern` declaration for a JavaScript function
-    /// This is used to bind JavaScript functions to Azalea functions.
-    ExternDecl(Function),
-
-    /// A function declaration
-    FnDecl(Function),
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -450,26 +450,6 @@ impl<'a> Parser<'a> {
         Ok(spanned(Expr::Array { elements }, location))
     }
 
-    fn parse_array_index(&mut self) -> parser::Return<Span<Expr>> {
-        // array[0]
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
-
-        let array = self.parse_main_expr()?;
-        self.expect(TokenKind::LSquare)?;
-
-        let index = self.parse_expr()?;
-
-        self.expect(TokenKind::RSquare)?;
-
-        Ok(spanned(
-            Expr::ArrayIndex {
-                target: Box::new(array),
-                index: Box::new(index),
-            },
-            location,
-        ))
-    }
-
     /// Parse a record expression
     fn parse_record_expr(&mut self) -> parser::Return<Span<Expr>> {
         // .{ field1: 1, field2: 2 } or Named { field1: 1, field2: 2 }

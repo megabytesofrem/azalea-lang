@@ -3,14 +3,19 @@ source: crates/azalea-core/src/typeck/tests.rs
 expression: output
 ---
 TYPE1:
-ᵗA[ᵗa]
+A[ᵗa]
 
 TYPE2:
-ᵗa[ᵗa]
+a[ᵗa]
 
 RESULT:
 Err(
-    UnificationError(
-        "Cannot unify TypeCons(\"A\", [Var(\"a\")]) with TypeCons(\"a\", [Var(\"a\")])",
-    ),
+    UnificationError {
+        message: "Cannot unify TypeCons(\"A\", [Var(\"a\")]) with TypeCons(\"a\", [Var(\"a\")])",
+        location: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    },
 )

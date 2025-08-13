@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::error::ParserError;
-use crate::ast::Stmt;
+use crate::ast::{ParseRoot, Stmt, ToplevelStmt};
 use crate::lexer::{self, LexerIter, Op, Token, TokenKind};
 use crate::parse::{base, span::Span};
 
@@ -19,7 +19,7 @@ pub struct Parser<'a> {
     token_stream: LexerIter<'a>,
     errors: Vec<ParserError>,
 
-    pub ast: Vec<Span<Stmt>>,
+    pub ast: ParseRoot,
     pub precedence_table: HashMap<Op, (u8, Assoc)>,
 
     // Keep track of the location internally
@@ -61,12 +61,16 @@ impl<'a> Parser<'a> {
     pub fn parse(token_stream: lexer::LexerIter<'a>) -> base::Return<'a, Parser<'a>> {
         let mut parser = Parser::new(token_stream);
 
-        // Parse multiple statements until EOF
+        // Skip any comments
+        while parser.peek().map(|t| t.kind) == Some(TokenKind::Comment) {
+            parser.next(); // consume the comment token
+        }
+
+        // Parse multiple top-level statements until EOF
         while parser.peek().is_some() {
-            match parser.parse_stmt() {
-                Ok(stmt) => {
-                    // println!("Parsed statement: {:?}", stmt);
-                    parser.ast.push(stmt);
+            match parser.parse_toplevel_stmt() {
+                Ok(toplevel_stmt) => {
+                    parser.ast.push(toplevel_stmt);
                 }
                 Err(err) => {
                     println!("Parse error: {:?}", err);
@@ -76,6 +80,29 @@ impl<'a> Parser<'a> {
         }
 
         Ok(parser)
+    }
+
+    /// Parse a top-level statement (record, enum, or regular statement)
+    pub(crate) fn parse_toplevel_stmt(&mut self) -> Return<Span<ToplevelStmt>> {
+        // let start_location = self.peek().map(|t| t.location).unwrap_or_default();
+
+        // Skip any comments
+        while self.peek().map(|t| t.kind) == Some(TokenKind::Comment) {
+            self.next(); // consume the comment token
+        }
+
+        match self.peek().map(|t| t.kind) {
+            Some(TokenKind::KwRecord) => Ok(self.parse_record_decl()?),
+            Some(TokenKind::KwEnum) => Ok(self.parse_enum_decl()?),
+            Some(TokenKind::KwFn) => Ok(self.parse_fn_decl()?),
+            Some(TokenKind::KwExtern) => Ok(self.parse_extern_decl()?),
+            _ => {
+                // For all other tokens, parse as a regular statement
+                let stmt = self.parse_stmt()?;
+                let stmt_loc = stmt.loc.clone();
+                Ok(Span::new(ToplevelStmt::Stmt(stmt), stmt_loc))
+            }
+        }
     }
 
     /// Skip tokens until we find a good recovery point for parsing the next statement
@@ -164,7 +191,6 @@ impl<'a> Parser<'a> {
         } else {
             let error = ParserError::UnexpectedToken {
                 token: token.kind,
-                expected_any: vec![kind],
                 location: token.location,
             };
 
@@ -185,7 +211,6 @@ impl<'a> Parser<'a> {
         } else {
             let error = ParserError::UnexpectedToken {
                 token: token.kind,
-                expected_any: vec![kind],
                 location: token.location,
             };
 
@@ -211,7 +236,6 @@ impl<'a> Parser<'a> {
         } else {
             let error = ParserError::UnexpectedToken {
                 token: token.kind,
-                expected_any: kinds,
                 location: token.location,
             };
 

@@ -1,13 +1,13 @@
 use crate::ast::ast_types::{Function, Ty};
 use crate::ast::pretty::Pretty;
-use crate::ast::{Expr, Literal, Stmt};
+use crate::ast::{Expr, Literal, Stmt, ToplevelStmt};
 use crate::codegen::pp::PrettyPrinter;
 use crate::lexer::Op;
 use crate::parse::span::Span;
 
 #[derive(Debug, Clone)]
 pub struct JSCodegen {
-    ast: Vec<Span<Stmt>>,
+    ast: Vec<Span<ToplevelStmt>>,
     pp: PrettyPrinter,
 
     /// The generated JavaScript code.
@@ -17,11 +17,12 @@ pub struct JSCodegen {
 /// Trait for generating code from an AST.
 pub trait Emit {
     fn visit_expr(&mut self, expr: &Expr) -> String;
+    fn visit_toplevel(&mut self, toplevel: &ToplevelStmt) -> String;
     fn visit_stmt(&mut self, stmt: &Stmt) -> String;
 
     fn visit_block(&mut self, block: Vec<Span<Stmt>>) -> String;
 
-    fn emit_code(&mut self, ast: Vec<Span<Stmt>>);
+    fn emit_code(&mut self, ast: Vec<Span<ToplevelStmt>>);
 }
 
 /// Desugar an if-else expression into a ternary expression.
@@ -88,19 +89,11 @@ impl JSCodegen {
     fn lookup_function(&self, name: &str) -> Option<Function> {
         self.ast
             .iter()
-            .find_map(|stmt| {
-                if let Stmt::FnDecl(func) = &stmt.target {
-                    if func.name == name {
-                        return Some(func);
-                    }
-                } else if let Stmt::ExternDecl(func) = &stmt.target {
-                    if func.name == name {
-                        return Some(func);
-                    }
-                }
-                None
+            .filter_map(|span| match &span.target {
+                ToplevelStmt::FnDecl(func) if func.name == name => Some(func.clone()),
+                _ => None,
             })
-            .cloned()
+            .next()
     }
 
     fn visit_bin_op(&mut self, left: &Expr, op: &Op, right: &Expr) -> String {
@@ -278,25 +271,14 @@ impl Emit for JSCodegen {
         }
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt) -> String {
-        match &stmt {
-            Stmt::Expr(expr) => self.visit_expr(&expr.target),
-            Stmt::Let { name, ty: _, value } => {
-                let value_emit = self.visit_expr(&value.target);
-                format!("const {} = {};", name, value_emit)
+    fn visit_toplevel(&mut self, toplevel: &ToplevelStmt) -> String {
+        match &toplevel {
+            ToplevelStmt::Stmt(stmt) => {
+                // Visit the statement and return its JS representation
+                self.visit_stmt(&stmt.target)
             }
 
-            Stmt::Mut { name, ty: _, value } => {
-                let value_emit = self.visit_expr(&value.target);
-                format!("let /*mut*/ {} = {};", name, value_emit)
-            }
-
-            Stmt::Assign { name, value } => {
-                let value_emit = self.visit_expr(&value.target);
-                format!("{} = {};", name, value_emit)
-            }
-
-            Stmt::RecordDecl(record) => {
+            ToplevelStmt::RecordDecl(record) => {
                 // FIXME: This should use the default value of the field type, need to get this
 
                 let fields: Vec<String> = record
@@ -311,7 +293,7 @@ impl Emit for JSCodegen {
                 )
             }
 
-            Stmt::EnumDecl(enum_decl) => {
+            ToplevelStmt::EnumDecl(enum_decl) => {
                 // Format { name: variant } for each variant
                 let variant_map: Vec<String> = enum_decl
                     .variants
@@ -327,7 +309,7 @@ impl Emit for JSCodegen {
                 )
             }
 
-            Stmt::ExternDecl(func) => {
+            ToplevelStmt::ExternDecl(func) => {
                 // For extern functions, we just emit the function signature
                 // without any body, as they are expected to be defined in JS.
                 let func_args: Vec<String> =
@@ -340,7 +322,7 @@ impl Emit for JSCodegen {
                 )
             }
 
-            Stmt::FnDecl(func) => {
+            ToplevelStmt::FnDecl(func) => {
                 // Discard any type information for JS
                 let func_args: Vec<String> =
                     func.args.iter().map(|(name, _ty)| name.clone()).collect();
@@ -375,8 +357,45 @@ impl Emit for JSCodegen {
 
                 body_emit
             }
+        }
+    }
 
-            _ => todo!(),
+    fn visit_stmt(&mut self, stmt: &Stmt) -> String {
+        match &stmt {
+            Stmt::Expr(expr) => self.visit_expr(&expr.target),
+            Stmt::Let { name, ty: _, value } => {
+                let value_emit = self.visit_expr(&value.target);
+                format!("const {} = {};", name, value_emit)
+            }
+
+            Stmt::Mut { name, ty: _, value } => {
+                let value_emit = self.visit_expr(&value.target);
+                format!("let /*mut*/ {} = {};", name, value_emit)
+            }
+
+            Stmt::Assign { name, value } => {
+                let value_emit = self.visit_expr(&value.target);
+                format!("{} = {};", name, value_emit)
+            }
+
+            Stmt::For {
+                name,
+                iterable,
+                body,
+            } => {
+                let iterable_emit = self.visit_expr(&iterable.target);
+                let body_emit = self.visit_block(body.clone());
+                format!(
+                    "for (const {} of {}) {{\n{}\n}}",
+                    name, iterable_emit, body_emit
+                )
+            }
+
+            Stmt::While { cond, body } => {
+                let cond_emit = self.visit_expr(&cond.target);
+                let body_emit = self.visit_block(body.clone());
+                format!("while ({}) {{\n{}\n}}", cond_emit, body_emit)
+            }
         }
     }
 
@@ -394,11 +413,11 @@ impl Emit for JSCodegen {
         block_code
     }
 
-    fn emit_code(&mut self, ast: Vec<Span<Stmt>>) {
+    fn emit_code(&mut self, ast: Vec<Span<ToplevelStmt>>) {
         self.ast = ast;
 
-        for stmt in self.ast.clone() {
-            let stmt_js = self.visit_stmt(&stmt.target);
+        for toplevel in self.ast.clone() {
+            let stmt_js = self.visit_toplevel(&toplevel.target);
             self.js_code.push_str(&self.pp.print(&stmt_js));
             self.js_code.push('\n');
         }

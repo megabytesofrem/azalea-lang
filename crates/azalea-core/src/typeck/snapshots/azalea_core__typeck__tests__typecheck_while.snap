@@ -6,11 +6,9 @@ SOURCE:
 while 1==1 do let x = 5 end
 
 RESULT:
-Err(
-    UnificationError(
-        "Cannot unify Int with Bool",
-    ),
+Ok(
+    (),
 )
 
 ENV:
-{}
+{ x := Int }

@@ -5,7 +5,7 @@ expression: output
 VAR: a
 
 TYPE:
-ᵗa[ᵗa]
+a[ᵗa]
 
 RESULT:
 true

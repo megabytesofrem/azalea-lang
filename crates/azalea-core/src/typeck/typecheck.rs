@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::ast_types::{Function, Record, RecordExpr, Ty};
 use crate::ast::pretty::Pretty;
-use crate::ast::{Expr, Literal, Stmt};
+use crate::ast::{Expr, Literal, ParseRoot, Stmt, ToplevelStmt};
 use crate::lexer::SourceLoc;
 use crate::parse::span::Span;
 
@@ -270,19 +270,34 @@ impl Typechecker {
         Ok(last_seen_ty)
     }
 
-    pub fn check(
+    pub fn check_toplevel(
         &mut self,
         env: &mut TypingEnv,
-        stmt: &Span<Stmt>,
+        toplevel: &Span<ToplevelStmt>,
         location: SourceLoc,
     ) -> Result<(), SemanticError> {
-        match &stmt.target {
-            Stmt::Expr(expr) => {
-                self.infer_type(env, &expr.target, expr.loc.clone())?;
+        match &toplevel.target {
+            ToplevelStmt::Stmt(stmt) => self.check(env, stmt, location),
+
+            ToplevelStmt::RecordDecl(record) => {
+                let ty = record.to_type();
+                let local_subst = self.unify(&ty, &record.to_type(), toplevel.loc.clone())?;
+                env.extend(local_subst);
+                self.global_env.define_record(record.clone());
+                env.insert(record.name.clone(), ty);
                 Ok(())
             }
 
-            Stmt::ExternDecl(extern_func) => {
+            ToplevelStmt::EnumDecl(enum_decl) => {
+                let ty = enum_decl.to_type();
+                let local_env = self.unify(&ty, &enum_decl.to_type(), toplevel.loc.clone())?;
+                env.extend(local_env);
+                self.global_env.define_enum(enum_decl.clone());
+                env.insert(enum_decl.name.clone(), ty);
+                Ok(())
+            }
+
+            ToplevelStmt::ExternDecl(extern_func) => {
                 // Store the extern function in the type registry
                 self.global_env.define_extern(extern_func.clone());
 
@@ -308,6 +323,141 @@ impl Typechecker {
 
                 env.insert(extern_func.name.clone(), func_ty);
 
+                Ok(())
+            }
+
+            ToplevelStmt::FnDecl(func_decl) => {
+                // Create a new scope for the function
+                self.resolver.push_scope();
+
+                let mut local_env = env.clone();
+
+                // Add type parameters to the environment as type variables
+                for ty_param in &func_decl.type_params {
+                    let ty_var = Ty::Var(ty_param.clone());
+                    local_env.insert(ty_param.clone(), ty_var);
+                }
+
+                // Create the function type early (with potentially unresolved types!)
+                let initial_func_ty = Ty::Fn(Box::new(Function {
+                    name: func_decl.name.clone(),
+                    args: func_decl.args.clone(),
+                    type_params: func_decl.type_params.clone(),
+                    return_ty: func_decl.return_ty.clone(),
+                    body: None,
+                    body_expr: None,
+                    is_extern: false,
+                    extern_name: func_decl.extern_name.clone(),
+                }));
+
+                // Add the function to the local environment for recursive calls
+                local_env.insert(func_decl.name.clone(), initial_func_ty.clone());
+
+                // println!(
+                //     "DEBUG: Local environment of function '{}': {}",
+                //     func_decl.name,
+                //     self.pretty_print_env(&local_env)
+                // );
+
+                for (arg_name, arg_ty) in &func_decl.args {
+                    // Handle types that are unknown for now but can be inferred later
+                    // We generate a fresh type variable, marking it as polymorphic
+                    let actual_arg_ty = if *arg_ty == Ty::Unresolved {
+                        Ty::Var(self.fresh())
+                    } else {
+                        arg_ty.clone()
+                    };
+
+                    // Add function parameters to the resolver
+                    self.resolver
+                        .define_variable(arg_name.clone(), actual_arg_ty.clone())
+                        .map_err(|_| SemanticError::RedefinedVariable(arg_name.clone()))?;
+
+                    local_env.insert(arg_name.clone(), actual_arg_ty);
+                }
+
+                // Infer the body type of the function
+                let body_ty = if let Some(body_expr) = &func_decl.body_expr {
+                    self.infer_type(&mut local_env, &body_expr.target, body_expr.loc.clone())?
+                } else if let Some(body_stmts) = &func_decl.body {
+                    self.infer_block(&body_stmts, &mut local_env, location.clone())?
+                } else {
+                    Ty::Unit
+                };
+
+                // Unify with any declared return type, if there is one
+                let return_ty = if func_decl.return_ty != Ty::Unresolved {
+                    self.unify(&func_decl.return_ty, &body_ty, location.clone())?;
+                    func_decl.return_ty.clone()
+                } else {
+                    body_ty
+                };
+
+                // Apply our substitutions to the arguments using `hydrate_type`
+                // FIXME: Fix so we can infer argument types from the body
+                let args: Vec<(String, Ty)> = func_decl
+                    .args
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.hydrate_type(ty, &local_env)))
+                    .collect();
+
+                // Add the function to the environment
+                let func_ty = Ty::Fn(Box::new(Function {
+                    name: func_decl.name.clone(),
+                    args: args,
+                    type_params: func_decl.type_params.clone(),
+                    return_ty: return_ty,
+                    body: if func_decl.body.is_some() {
+                        Some(func_decl.body.clone().unwrap())
+                    } else {
+                        None
+                    },
+                    body_expr: if func_decl.body_expr.is_some() {
+                        Some(func_decl.body_expr.clone().unwrap())
+                    } else {
+                        None
+                    },
+
+                    is_extern: false,
+                    extern_name: func_decl.extern_name.clone(),
+                }));
+
+                // Pop the function scope
+                self.resolver
+                    .pop_scope()
+                    .map_err(|_| SemanticError::UnificationError {
+                        message: "Failed to pop function scope".to_string(),
+                        location: toplevel.loc.clone(),
+                    })?;
+
+                // Debug print
+                let generalize_ty = self.generalize(&env, &func_ty);
+                println!(
+                    "DEBUG: Generalize function '{}' ⟹  {}",
+                    func_decl.name.clone(),
+                    generalize_ty.pretty(),
+                );
+
+                // Add the function to both the resolver and typing environment
+                self.resolver
+                    .define_function(func_decl.name.clone(), generalize_ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(func_decl.name.clone()))?;
+                env.insert(func_decl.name.clone(), generalize_ty);
+
+                Ok(())
+            }
+        }
+    }
+
+    pub fn check(
+        &mut self,
+        env: &mut TypingEnv,
+        stmt: &Span<Stmt>,
+        location: SourceLoc,
+    ) -> Result<(), SemanticError> {
+        match &stmt.target {
+            Stmt::Expr(expr) => {
+                self.infer_type(env, &expr.target, expr.loc.clone())?;
                 Ok(())
             }
 
@@ -426,181 +576,26 @@ impl Typechecker {
 
                 Ok(())
             }
-
-            Stmt::RecordDecl(record) => {
-                let ty = record.to_type();
-                let local_subst = self.unify(&ty, &record.to_type(), stmt.loc.clone())?;
-                env.extend(local_subst);
-
-                // println!(
-                //     "DEBUG: Defining record {} with type {}",
-                //     record.name,
-                //     ty.pretty()
-                // );
-
-                let record_decl = Record {
-                    name: record.name.clone(),
-                    type_params: record.type_params.clone(),
-                    fields: record.fields.clone(),
-                };
-
-                self.global_env.define_record(record_decl);
-
-                // Add the record to the environment
-                env.insert(record.name.clone(), ty.clone());
-                Ok(())
-            }
-
-            Stmt::EnumDecl(enum_decl) => {
-                let ty = enum_decl.to_type();
-                let local_env = self.unify(&ty, &enum_decl.to_type(), stmt.loc.clone())?;
-                env.extend(local_env);
-
-                // Add the enum to the environment
-
-                self.global_env.define_enum(enum_decl.clone());
-                env.insert(enum_decl.name.clone(), ty.clone());
-
-                // // Add all fields of the enum to the environment
-                // for variant_name in &enum_decl.variants {
-                //     // Each variant is a type constructor with no parameters
-                //     let variant_ty = Ty::TypeCons(variant_name.clone(), vec![]);
-                //     env.insert(format!("{}.{}", enum_decl.name, variant_name), variant_ty);
-                // }
-
-                Ok(())
-            }
-
-            Stmt::FnDecl(func_decl) => {
-                // Create a new scope for the function
-                self.resolver.push_scope();
-
-                let mut local_env = env.clone();
-
-                // Add type parameters to the environment as type variables
-                for ty_param in &func_decl.type_params {
-                    let ty_var = Ty::Var(ty_param.clone());
-                    local_env.insert(ty_param.clone(), ty_var);
-                }
-
-                // Create the function type early (with potentially unresolved types!)
-                let initial_func_ty = Ty::Fn(Box::new(Function {
-                    name: func_decl.name.clone(),
-                    args: func_decl.args.clone(),
-                    type_params: func_decl.type_params.clone(),
-                    return_ty: func_decl.return_ty.clone(),
-                    body: None,
-                    body_expr: None,
-                    is_extern: false,
-                    extern_name: func_decl.extern_name.clone(),
-                }));
-
-                // Add the function to the local environment for recursive calls
-                local_env.insert(func_decl.name.clone(), initial_func_ty.clone());
-
-                // println!(
-                //     "DEBUG: Local environment of function '{}': {}",
-                //     func_decl.name,
-                //     self.pretty_print_env(&local_env)
-                // );
-
-                for (arg_name, arg_ty) in &func_decl.args {
-                    // Handle types that are unknown for now but can be inferred later
-                    // We generate a fresh type variable, marking it as polymorphic
-                    let actual_arg_ty = if *arg_ty == Ty::Unresolved {
-                        Ty::Var(self.fresh())
-                    } else {
-                        arg_ty.clone()
-                    };
-
-                    // Add function parameters to the resolver
-                    self.resolver
-                        .define_variable(arg_name.clone(), actual_arg_ty.clone())
-                        .map_err(|_| SemanticError::RedefinedVariable(arg_name.clone()))?;
-
-                    local_env.insert(arg_name.clone(), actual_arg_ty);
-                }
-
-                // Infer the body type of the function
-                let body_ty = if let Some(body_expr) = &func_decl.body_expr {
-                    self.infer_type(&mut local_env, &body_expr.target, body_expr.loc.clone())?
-                } else if let Some(body_stmts) = &func_decl.body {
-                    self.infer_block(&body_stmts, &mut local_env, location.clone())?
-                } else {
-                    Ty::Unit
-                };
-
-                // Unify with any declared return type, if there is one
-                let return_ty = if func_decl.return_ty != Ty::Unresolved {
-                    self.unify(&func_decl.return_ty, &body_ty, location.clone())?;
-                    func_decl.return_ty.clone()
-                } else {
-                    body_ty
-                };
-
-                // Apply our substitutions to the arguments using `hydrate_type`
-                // FIXME: Fix so we can infer argument types from the body
-                let args: Vec<(String, Ty)> = func_decl
-                    .args
-                    .iter()
-                    .map(|(name, ty)| (name.clone(), self.hydrate_type(ty, &local_env)))
-                    .collect();
-
-                // Add the function to the environment
-                let func_ty = Ty::Fn(Box::new(Function {
-                    name: func_decl.name.clone(),
-                    args: args,
-                    type_params: func_decl.type_params.clone(),
-                    return_ty: return_ty,
-                    body: if func_decl.body.is_some() {
-                        Some(func_decl.body.clone().unwrap())
-                    } else {
-                        None
-                    },
-                    body_expr: if func_decl.body_expr.is_some() {
-                        Some(func_decl.body_expr.clone().unwrap())
-                    } else {
-                        None
-                    },
-
-                    is_extern: false,
-                    extern_name: func_decl.extern_name.clone(),
-                }));
-
-                // Pop the function scope
-                self.resolver
-                    .pop_scope()
-                    .map_err(|_| SemanticError::UnificationError {
-                        message: "Failed to pop function scope".to_string(),
-                        location: stmt.loc.clone(),
-                    })?;
-
-                // Debug print
-                let generalize_ty = self.generalize(&env, &func_ty);
-                println!(
-                    "DEBUG: Generalize function '{}' ⟹  {}",
-                    func_decl.name.clone(),
-                    generalize_ty.pretty(),
-                );
-
-                // Add the function to both the resolver and typing environment
-                self.resolver
-                    .define_function(func_decl.name.clone(), generalize_ty.clone())
-                    .map_err(|_| SemanticError::RedefinedVariable(func_decl.name.clone()))?;
-                env.insert(func_decl.name.clone(), generalize_ty);
-
-                Ok(())
-            }
         }
     }
 
-    pub fn walk_ast(&mut self, ast: Vec<Span<Stmt>>) -> Result<(), Vec<SemanticError>> {
+    pub fn walk_ast(&mut self, ast: ParseRoot) -> Result<(), Vec<SemanticError>> {
         let mut subst = TypingEnv::new();
 
-        for stmt in ast {
-            self.check(&mut subst, &stmt, stmt.loc.clone())
-                .map_err(|e| self.errors.push(e))
-                .unwrap_or(());
+        for toplevel in ast {
+            match toplevel.clone().target {
+                ToplevelStmt::Stmt(stmt) => {
+                    self.check(&mut subst, &stmt, stmt.loc.clone())
+                        .map_err(|e| self.errors.push(e))
+                        .unwrap_or(());
+                }
+
+                _toplevel => {
+                    self.check_toplevel(&mut subst, &toplevel, toplevel.loc.clone())
+                        .map_err(|e| self.errors.push(e))
+                        .unwrap_or(());
+                }
+            }
         }
 
         if self.errors.is_empty() {

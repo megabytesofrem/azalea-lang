@@ -1,5 +1,5 @@
 use crate::ast::ast_types::{Function, Record, Ty};
-use crate::ast::{Expr, Literal, Stmt};
+use crate::ast::{Expr, Literal, Stmt, ToplevelStmt};
 use crate::lexer::SourceLoc;
 use crate::parse::span::{Span, spanned};
 use crate::typeck::typecheck::{Typechecker, TypingEnv};
@@ -12,8 +12,10 @@ macro_rules! assert_typechecks {
         let mut env = TypingEnv::new();
         let result = tc.check(&mut env, &stmt.clone(), stmt.loc);
         let output = format!(
-            "SOURCE:\n{}\n\nRESULT:\n{:#?}\n\nENV:\n{:#?}",
-            $src, result, env
+            "SOURCE:\n{}\n\nRESULT:\n{:#?}\n\nENV:\n{}",
+            $src,
+            result,
+            tc.pretty_print_env(&env)
         );
         assert_snapshot!(output);
     }};
@@ -28,7 +30,7 @@ macro_rules! assert_infer {
             "EXPR:\n{}\n\nRESULT:\n{:#?}\n\nENV:\n{:#?}",
             crate::ast::pretty::pretty(&$expr),
             result,
-            env
+            tc.pretty_print_env(&env)
         );
         assert_snapshot!(output);
     }};
@@ -120,14 +122,18 @@ fn infer_most_general_types() {
         Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
     );
 
-    let fn_decl = Stmt::FnDecl(f.clone());
-    let result = tc.check(
+    let fn_decl = ToplevelStmt::FnDecl(f.clone());
+    let result = tc.check_toplevel(
         &mut env,
         &spanned(fn_decl, SourceLoc::default()),
         SourceLoc::default(),
     );
 
-    let output = format!("RESULT:\n{:#?}\n\nENV:\n{:#?}", result, env);
+    let output = format!(
+        "RESULT:\n{:#?}\n\nENV:\n{}",
+        result,
+        tc.pretty_print_env(&env)
+    );
     assert_snapshot!(output);
 }
 
@@ -166,10 +172,14 @@ fn typecheck_fn_type() {
     let args = vec![("y".to_string(), Ty::Int)];
     let declared_func = Function::new_with_stmts("f".to_string(), args, Ty::Unresolved, body_stmts);
 
-    let stmt = spanned(Stmt::FnDecl(declared_func), SourceLoc::default());
-    let result = tc.check(&mut env, &stmt, SourceLoc::default());
+    let stmt = spanned(ToplevelStmt::FnDecl(declared_func), SourceLoc::default());
+    let result = tc.check_toplevel(&mut env, &stmt, SourceLoc::default());
 
-    let output = format!("RESULT:\n{:#?}\n\nENV:\n{:#?}", result, env);
+    let output = format!(
+        "RESULT:\n{:#?}\n\nENV:\n{}",
+        result,
+        tc.pretty_print_env(&env)
+    );
     assert_snapshot!(output);
 }
 

@@ -7,12 +7,16 @@ use crate::{
 pub enum ParserError {
     UnexpectedToken {
         token: TokenKind,
-        expected_any: Vec<TokenKind>,
         location: SourceLoc,
     },
 
+    /// Expected an expression
     ExpectedExpr(SourceLoc),
+
+    /// Expected a statement
     ExpectedStmt(SourceLoc),
+
+    /// Expected a type (e.g., in a variable declaration)
     ExpectedType(SourceLoc),
 
     MissingClosingParen(SourceLoc),
@@ -32,15 +36,8 @@ pub enum ParserError {
 impl ParserError {
     pub fn report(&self) -> ErrorReport {
         match self {
-            ParserError::UnexpectedToken {
-                token,
-                expected_any,
-                location,
-            } => ErrorReport::new(
-                format!(
-                    "Unexpected token: {:?}, expected one of: {:?}",
-                    token, expected_any
-                ),
+            ParserError::UnexpectedToken { token, location } => ErrorReport::new(
+                format!("Unexpected token: {:?}", token),
                 "Syntax error".to_string(),
                 location.clone(),
             ),

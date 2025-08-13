@@ -6,15 +6,15 @@ use super::Parser;
 use super::base as parser;
 use super::error::ParserError;
 use crate::ast::Block;
+use crate::ast::ToplevelStmt;
 use crate::ast::ast_types::Enum;
 use crate::ast::ast_types::Function;
 use crate::ast::ast_types::Record;
 use crate::ast::ast_types::Ty;
 use crate::ast::{Expr, Stmt};
-use crate::lexer::{SourceLoc, TokenKind};
+use crate::lexer::TokenKind;
 use crate::parse::span::Span;
 use crate::parse::span::spanned;
-use crate::parse::type_;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_stmt(&mut self) -> parser::Return<Span<Stmt>> {
@@ -22,16 +22,6 @@ impl<'a> Parser<'a> {
         while self.peek().map(|t| t.kind) == Some(TokenKind::Comment) {
             self.next(); // consume the comment token
         }
-
-        let expected_tokens = vec![
-            TokenKind::KwLet,
-            TokenKind::KwFor,
-            TokenKind::KwWhile,
-            TokenKind::KwRecord,
-            TokenKind::KwEnum,
-            TokenKind::KwFn,
-            TokenKind::Name,
-        ];
 
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
@@ -46,10 +36,6 @@ impl<'a> Parser<'a> {
             Some(TokenKind::KwClass) => self.parse_typeclass_decl(),
             Some(TokenKind::KwImpl) => self.parse_typeclass_instance(),
             Some(TokenKind::KwWhile) => self.parse_while(),
-            Some(TokenKind::KwRecord) => self.parse_record_decl(),
-            Some(TokenKind::KwEnum) => self.parse_enum_decl(),
-            Some(TokenKind::KwExtern) => self.parse_extern_decl(),
-            Some(TokenKind::KwFn) => self.parse_fn_decl(),
             Some(TokenKind::Name) => {
                 // Look ahead to see if this is an assignment (name = expr)
                 // We'll save the current state and try parsing as assignment first
@@ -88,14 +74,12 @@ impl<'a> Parser<'a> {
             }
             _ => Err(ParserError::UnexpectedToken {
                 token: self.peek().map(|t| t.kind).unwrap(),
-                expected_any: expected_tokens,
                 location,
             }),
         }
     }
 
     pub(crate) fn parse_block(&mut self) -> parser::Return<Block> {
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
         self.expect(TokenKind::KwDo)?;
 
         let mut stmts_in_block = Vec::new();
@@ -111,7 +95,6 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_starting_block(&mut self) -> parser::Return<Block> {
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
         self.expect_one_of(vec![TokenKind::KwDo, TokenKind::KwThen, TokenKind::KwElse])?;
 
         let mut stmts_in_block = Vec::new();
@@ -193,7 +176,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_for(&mut self) -> parser::Return<Span<Stmt>> {
-        // for name in expr do .. end
+        // for name in expr do
+        //   ...
+        // end
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwFor)?;
@@ -217,7 +202,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_while(&mut self) -> parser::Return<Span<Stmt>> {
-        // while expr do .. end
+        // while expr do
+        //   ...
+        // end
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwWhile)?;
@@ -235,7 +222,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_record_decl(&mut self) -> parser::Return<Span<Stmt>> {
+    pub(crate) fn parse_record_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // record name = { field: ty, ... }
         // record name[A] = { field: ty, ... }
         let location = self.peek().map(|t| t.location).unwrap_or_default();
@@ -281,7 +268,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RBrace)?;
 
         Ok(spanned(
-            Stmt::RecordDecl(Record {
+            ToplevelStmt::RecordDecl(Record {
                 name: name.to_string(),
                 type_params,
                 fields: record_fields,
@@ -290,7 +277,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_enum_decl(&mut self) -> parser::Return<Span<Stmt>> {
+    pub(crate) fn parse_enum_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // enum name = { variant1, variant2, ... }
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
@@ -315,7 +302,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RBrace)?;
 
         Ok(spanned(
-            Stmt::EnumDecl(Enum {
+            ToplevelStmt::EnumDecl(Enum {
                 name: name.to_string(),
                 variants: enum_variants,
             }),
@@ -323,7 +310,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_fn_decl(&mut self) -> parser::Return<Span<Stmt>> {
+    pub(crate) fn parse_fn_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // fn name(args: ty, ...) -> ty =
         // With generics: fn name[T, U](args: ty, ...) -> ty =
         let location = self.peek().map(|t| t.location).unwrap_or_default();
@@ -395,10 +382,10 @@ impl<'a> Parser<'a> {
             func.type_params = type_params;
         }
 
-        Ok(spanned(Stmt::FnDecl(func), location))
+        Ok(spanned(ToplevelStmt::FnDecl(func), location))
     }
 
-    fn parse_extern_decl(&mut self) -> parser::Return<Span<Stmt>> {
+    pub(crate) fn parse_extern_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // extern fn "js_name" name(args: ty, ...) : ty
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
@@ -436,7 +423,7 @@ impl<'a> Parser<'a> {
 
         let func = Function::new_extern(extern_name.to_string(), name.to_string(), args, return_ty);
 
-        Ok(spanned(Stmt::ExternDecl(func), location))
+        Ok(spanned(ToplevelStmt::ExternDecl(func), location))
     }
 
     fn parse_remaining_expr(&mut self, mut lhs: Span<Expr>) -> parser::Return<Span<Expr>> {

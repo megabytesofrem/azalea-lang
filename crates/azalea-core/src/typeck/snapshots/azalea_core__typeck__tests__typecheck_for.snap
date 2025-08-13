@@ -7,12 +7,23 @@ for x in [1, 2, 3] do let x = 5 end
 
 RESULT:
 Err(
-    UnificationError(
-        "Cannot unify Unresolved with Int",
-    ),
+    TypeMismatch {
+        expected: Array(
+            Unresolved,
+        ),
+        found: TypeCons(
+            "Array",
+            [
+                Int,
+            ],
+        ),
+        location: SourceLoc {
+            line: 1,
+            start: 9,
+            end: 10,
+        },
+    },
 )
 
 ENV:
-{
-    "x": Int,
-}
+{  }
