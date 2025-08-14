@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::ast_types::{Enum, EnumVariant, EnumVariantPayload, Function, Ty};
 use crate::ast::pretty::Pretty;
@@ -18,6 +18,7 @@ pub struct JSCodegen {
 
     // Used to map scoped bindings e.g `let x = 5;` to `freeze.x`
     relative_to_binding: Option<String>,
+    relative_bindings: HashSet<String>,
 
     pub functions: HashMap<String, Function>,
     pub global_env: GlobalEnv,
@@ -93,6 +94,7 @@ impl JSCodegen {
             pp: PrettyPrinter::new(),
             js_code: String::new(),
             relative_to_binding: None,
+            relative_bindings: HashSet::new(),
 
             functions: HashMap::new(),
             global_env: GlobalEnv::new(),
@@ -301,7 +303,7 @@ impl Emit for JSCodegen {
             },
 
             Expr::Ident(name) => {
-                if self.relative_to_binding.is_some() {
+                if self.relative_to_binding.is_some() && self.relative_bindings.contains(name) {
                     // If we are in a scoped binding, prepend the relative binding
                     return format!("{}.{}", self.relative_to_binding.as_ref().unwrap(), name);
                 }
@@ -530,8 +532,6 @@ impl Emit for JSCodegen {
 
                 let mut bindings_code = String::new();
 
-                println!("DEBUG: Codegen: Visit Function: {:?}", func);
-
                 if !func.where_bindings.is_empty() {
                     // Handle where bindings
                     let where_bindings = func
@@ -556,6 +556,12 @@ impl Emit for JSCodegen {
                     // Single expression function
                     if func.body_expr.is_some() {
                         self.relative_to_binding = Some("freeze".to_string());
+                        self.relative_bindings = func
+                            .where_bindings
+                            .iter()
+                            .map(|binding| binding.name.clone())
+                            .collect();
+
                         let body_expr = self.visit_expr(&func.body_expr.as_ref().unwrap().target);
 
                         // If we have any bindings, prepend them
@@ -580,6 +586,7 @@ impl Emit for JSCodegen {
 
                         // Reset relative binding after use
                         self.relative_to_binding = None;
+                        self.relative_bindings.clear();
 
                         to_return
                     } else {
@@ -651,9 +658,19 @@ impl Emit for JSCodegen {
         let mut block_code = String::new();
 
         self.pp.indent();
-        for stmt in block {
-            let stmt_js = self.visit_stmt(&stmt.target);
-            block_code.push_str(&self.pp.print(&stmt_js));
+        let len = block.len();
+        for (i, stmt) in block.into_iter().enumerate() {
+            match &stmt.target {
+                Stmt::Expr(expr) if i == len - 1 => {
+                    // Last statement and it's an expression: emit as return
+                    let expr_js = self.visit_expr(&expr.target);
+                    block_code.push_str(&self.pp.print(&format!("return {};", expr_js)));
+                }
+                _ => {
+                    let stmt_js = self.visit_stmt(&stmt.target);
+                    block_code.push_str(&self.pp.print(&stmt_js));
+                }
+            }
             block_code.push('\n');
         }
         self.pp.dedent();

@@ -264,7 +264,10 @@ impl Typechecker {
                 Stmt::Expr(expr) => {
                     last_seen_ty = self.infer_type(env, &expr.target, expr.loc.clone())?
                 }
-                _ => self.check(env, stmt, location.clone())?,
+                _ => {
+                    self.check(env, stmt, location.clone())?;
+                    last_seen_ty = Ty::Unit;
+                }
             }
         }
 
@@ -369,21 +372,6 @@ impl Typechecker {
                     where_bindings: func_decl.where_bindings.clone(),
                 }));
 
-                // Add where bindings to the local environment
-                for binding in &func_decl.where_bindings {
-                    let binding_ty = self.infer_type(
-                        &mut local_env,
-                        &binding.value.target,
-                        binding.value.loc.clone(),
-                    )?;
-
-                    local_env.insert(binding.name.clone(), binding_ty.clone());
-
-                    self.resolver
-                        .define_variable(binding.name.clone(), binding_ty)
-                        .map_err(|_| SemanticError::RedefinedVariable(binding.name.clone()))?;
-                }
-
                 // Add the function to the local environment for recursive calls
                 local_env.insert(func_decl.name.clone(), initial_func_ty.clone());
 
@@ -408,6 +396,21 @@ impl Typechecker {
                         .map_err(|_| SemanticError::RedefinedVariable(arg_name.clone()))?;
 
                     local_env.insert(arg_name.clone(), actual_arg_ty);
+                }
+
+                // Add where bindings to the local environment
+                for binding in &func_decl.where_bindings {
+                    let binding_ty = self.infer_type(
+                        &mut local_env,
+                        &binding.value.target,
+                        binding.value.loc.clone(),
+                    )?;
+
+                    local_env.insert(binding.name.clone(), binding_ty.clone());
+
+                    self.resolver
+                        .define_variable(binding.name.clone(), binding_ty)
+                        .map_err(|_| SemanticError::RedefinedVariable(binding.name.clone()))?;
                 }
 
                 // Infer the body type of the function
