@@ -21,3 +21,7 @@ fn test() = do
 end
 
 map_filter_greater_two([1, 2, 3, 4, 5])
+
+fn where_test() = x + y + 1 
+  where x: Int = 5,
+        y: Int = 10

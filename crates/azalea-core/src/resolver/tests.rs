@@ -56,6 +56,7 @@ fn define_function(
         return_ty,
         body: None,
         body_expr: None,
+        where_bindings: vec![],
         is_extern: false,  // Not an extern function in this test
         extern_name: None, // No extern name for this test
     }));
@@ -191,6 +192,7 @@ fn valid_function_scoping() {
         return_ty: Ty::Unit,
         body: None,
         body_expr: None,
+        where_bindings: vec![],
         is_extern: false,  // Not an extern function in this test
         extern_name: None, // No extern name for this test
     }));
@@ -211,6 +213,7 @@ fn valid_function_scoping() {
         return_ty: Ty::Int,
         body: None,
         body_expr: None,
+        where_bindings: vec![],
         is_extern: false,  // Not an extern function in this test
         extern_name: None, // No extern name for this test
     }));

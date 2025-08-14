@@ -1,7 +1,7 @@
 use insta::assert_snapshot;
 
 use crate::ast::pretty::{Pretty, pretty_with_loc};
-use crate::{parse_expr, parse_stmt};
+use crate::{parse_expr, parse_stmt, parse_toplevel};
 
 macro_rules! assert_success {
     ($src:expr) => {
@@ -132,6 +132,14 @@ fn let_stmt() {
 fn for_loop() {
     let src = "for x in [1, 2, 3] do let x = 5 end";
     let result = parse_stmt!(src);
+    let output = format!("SOURCE:\n{}\n\nAST:\n{:#?}", src, result);
+    assert_snapshot!(output);
+}
+
+#[test]
+fn where_clause() {
+    let src = "fn foo(): Int = x * 2 where x: Int = 5";
+    let result = parse_toplevel!(src);
     let output = format!("SOURCE:\n{}\n\nAST:\n{:#?}", src, result);
     assert_snapshot!(output);
 }

@@ -16,6 +16,9 @@ pub struct JSCodegen {
     /// The generated JavaScript code.
     pub js_code: String,
 
+    // Used to map scoped bindings e.g `let x = 5;` to `freeze.x`
+    relative_to_binding: Option<String>,
+
     pub functions: HashMap<String, Function>,
     pub global_env: GlobalEnv,
 }
@@ -89,6 +92,7 @@ impl JSCodegen {
             ast: Vec::new(),
             pp: PrettyPrinter::new(),
             js_code: String::new(),
+            relative_to_binding: None,
 
             functions: HashMap::new(),
             global_env: GlobalEnv::new(),
@@ -183,7 +187,7 @@ impl JSCodegen {
                     .join(", ");
                 format!("console.log({})", args_str)
             }
-            "Math.sqrt" | "Math.abs" | "Math.random" => {
+            extern_name if extern_name.starts_with("Math.") => {
                 let args_str = args
                     .iter()
                     .map(|arg| self.visit_expr(&arg.target))
@@ -259,15 +263,6 @@ impl JSCodegen {
                 }
             }
 
-            // Handle special cases like `to_string`
-            if name == "to_string" {
-                if args.len() != 1 {
-                    panic!("to_string expects exactly one argument");
-                }
-                let arg = self.visit_expr(&args.first().unwrap().target);
-                return format!("{}.toString()", arg);
-            }
-
             // Regular function call
             let args_emit: Vec<String> = args
                 .iter()
@@ -305,7 +300,14 @@ impl Emit for JSCodegen {
                 Literal::Bool(b) => b.to_string(),
             },
 
-            Expr::Ident(name) => name.clone(),
+            Expr::Ident(name) => {
+                if self.relative_to_binding.is_some() {
+                    // If we are in a scoped binding, prepend the relative binding
+                    return format!("{}.{}", self.relative_to_binding.as_ref().unwrap(), name);
+                }
+
+                name.clone()
+            }
             Expr::MemberAccess(member) => {
                 // TODO: Will this handle nested member accesses?
                 let emit = self.visit_expr(&member.target.target);
@@ -526,16 +528,60 @@ impl Emit for JSCodegen {
                     self.functions.insert(func.name.clone(), func.clone());
                 }
 
+                let mut bindings_code = String::new();
+
+                println!("DEBUG: Codegen: Visit Function: {:?}", func);
+
+                if !func.where_bindings.is_empty() {
+                    // Handle where bindings
+                    let where_bindings = func
+                        .where_bindings
+                        .iter()
+                        .map(|binding| {
+                            format!(
+                                "{}: {}",
+                                binding.name,
+                                self.visit_expr(&binding.value.target)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    // Freeze the object (closest to true immutability in JS)
+                    bindings_code =
+                        format!("const freeze = Object.freeze({{ {} }})", where_bindings);
+                }
+
                 let body_emit = if func.body.is_none() {
                     // Single expression function
                     if func.body_expr.is_some() {
+                        self.relative_to_binding = Some("freeze".to_string());
                         let body_expr = self.visit_expr(&func.body_expr.as_ref().unwrap().target);
-                        format!(
-                            "function {}({}) {{ return {}; }}",
-                            func.name,
-                            func_args.join(", "),
-                            body_expr
-                        )
+
+                        // If we have any bindings, prepend them
+                        let to_return = if func.where_bindings.is_empty() {
+                            // No where bindings, just return the expression
+                            format!(
+                                "function {}({}) {{ return {}; }}",
+                                func.name,
+                                func_args.join(", "),
+                                body_expr
+                            )
+                        } else {
+                            // With where bindings, we need to include them
+                            format!(
+                                "function {}({}) {{ {}; return {}; }}",
+                                func.name,
+                                func_args.join(", "),
+                                bindings_code,
+                                body_expr
+                            )
+                        };
+
+                        // Reset relative binding after use
+                        self.relative_to_binding = None;
+
+                        to_return
                     } else {
                         // Empty function body
                         format!("function {}({}) {{}}", func.name, func_args.join(", "))

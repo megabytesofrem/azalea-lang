@@ -114,4 +114,11 @@ pub enum Expr {
         then: Vec<Span<Stmt>>,
         else_: Option<Vec<Span<Stmt>>>,
     },
+
+    /// A `where` clause, used for defining local bindings in a scope
+    /// x + x where x = 5
+    Where {
+        body: Box<Span<Expr>>,
+        bindings: Vec<(String, Ty, Box<Span<Expr>>)>,
+    },
 }

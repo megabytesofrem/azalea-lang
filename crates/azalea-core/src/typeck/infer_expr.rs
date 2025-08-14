@@ -339,6 +339,7 @@ impl Typechecker {
                                             return_ty: Ty::TypeCons(name.clone(), params.clone()),
                                             body: None,
                                             body_expr: None,
+                                            where_bindings: vec![],
                                             is_extern: false,
                                             extern_name: None,
                                         };
@@ -354,6 +355,7 @@ impl Typechecker {
                                             return_ty: Ty::TypeCons(name.clone(), params.clone()),
                                             body: None,
                                             body_expr: None,
+                                            where_bindings: vec![],
                                             is_extern: false,
                                             extern_name: None,
                                         };
@@ -757,6 +759,7 @@ impl Typechecker {
                 resolved_args,
                 unified_return_ty,
                 body.clone(),
+                vec![],
             );
 
             // Generalize the function type if needed

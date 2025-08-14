@@ -120,6 +120,7 @@ fn infer_most_general_types() {
         vec![("x".to_string(), Ty::Var("x".to_string()))],
         Ty::Unresolved,
         Box::new(spanned(Expr::Ident("x".to_string()), SourceLoc::default())),
+        vec![],
     );
 
     let fn_decl = ToplevelStmt::FnDecl(f.clone());

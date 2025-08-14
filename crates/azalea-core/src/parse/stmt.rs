@@ -7,6 +7,7 @@ use super::base as parser;
 use super::error::ParserError;
 use crate::ast::Block;
 use crate::ast::ToplevelStmt;
+use crate::ast::ast_types::Binding;
 use crate::ast::ast_types::Enum;
 use crate::ast::ast_types::EnumVariant;
 use crate::ast::ast_types::EnumVariantPayload;
@@ -406,9 +407,58 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn parse_where_binding(&mut self, type_params: &HashSet<String>) -> parser::Return<Binding> {
+        // Parse a single where binding
+        // Format: name: ty = expr
+        let location = self.get_token_location();
+
+        let name = self.expect(TokenKind::Name)?.literal.to_string();
+        self.expect(TokenKind::Colon)?;
+        let ty = self.parse_primary_type(type_params)?;
+        self.expect(TokenKind::Eq)?;
+        let value = self.parse_expr()?;
+
+        Ok(Binding {
+            name,
+            ty,
+            value: Box::new(value),
+        })
+    }
+
+    fn parse_where_bindings(
+        &mut self,
+        type_params: &HashSet<String>,
+    ) -> parser::Return<Vec<Binding>> {
+        // Parse a list of where bindings
+        // Format:
+        // where name: ty = expr,
+        //       name2: ty2 = expr2, ...
+
+        let mut bindings = Vec::new();
+
+        self.expect(TokenKind::KwWhere)?;
+
+        while self.peek().map(|t| t.kind) != Some(TokenKind::Eq) {
+            let binding = self.parse_where_binding(type_params)?;
+            bindings.push(binding);
+
+            if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                self.next(); // consume the comma
+            } else {
+                break;
+            }
+        }
+
+        Ok(bindings)
+    }
+
     pub(crate) fn parse_fn_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
-        // fn name(args: ty, ...) -> ty =
-        // With generics: fn name[T, U](args: ty, ...) -> ty =
+        // fn name(args: ty, ...): ty = body
+        // With generics: fn name[T, U](args: ty, ...): ty = body
+
+        // With optional where bindings:
+        // fn calculate() = x where x: Int = 5
+
         let location = self.get_token_location();
 
         self.expect(TokenKind::KwFn)?;
@@ -470,7 +520,21 @@ impl<'a> Parser<'a> {
         } else {
             // Single expression function - use body_expr
             let expr = self.parse_expr()?;
-            Function::new_with_expr(name.to_string(), args, return_ty, Box::new(expr))
+
+            // Parse where bindings if they exist
+            let where_bindings = if self.peek().map(|t| t.kind) == Some(TokenKind::KwWhere) {
+                self.parse_where_bindings(&type_param_ctx)?
+            } else {
+                vec![]
+            };
+
+            Function::new_with_expr(
+                name.to_string(),
+                args,
+                return_ty,
+                Box::new(expr),
+                where_bindings,
+            )
         };
 
         if !type_params.is_empty() {

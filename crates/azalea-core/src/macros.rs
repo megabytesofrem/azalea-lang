@@ -17,3 +17,12 @@ macro_rules! parse_stmt {
         parser.parse_stmt()
     }};
 }
+
+#[macro_export]
+macro_rules! parse_toplevel {
+    ($src:expr) => {{
+        let tokens = crate::lexer::lex_tokens($src);
+        let mut parser = crate::parse::Parser::new(tokens);
+        parser.parse_toplevel_stmt()
+    }};
+}

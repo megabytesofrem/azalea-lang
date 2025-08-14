@@ -1,0 +1,80 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+fn foo(): Int = x * 2 where x: Int = 5
+
+AST:
+Ok(
+    Span {
+        target: FnDecl(
+            Function {
+                name: "foo",
+                args: [],
+                type_params: [],
+                return_ty: Int,
+                body: None,
+                body_expr: Some(
+                    Span {
+                        target: BinOp(
+                            Span {
+                                target: Ident(
+                                    "x",
+                                ),
+                                loc: SourceLoc {
+                                    line: 1,
+                                    start: 16,
+                                    end: 17,
+                                },
+                            },
+                            Mul,
+                            Span {
+                                target: Literal(
+                                    Int(
+                                        2,
+                                    ),
+                                ),
+                                loc: SourceLoc {
+                                    line: 1,
+                                    start: 20,
+                                    end: 21,
+                                },
+                            },
+                        ),
+                        loc: SourceLoc {
+                            line: 1,
+                            start: 16,
+                            end: 17,
+                        },
+                    },
+                ),
+                where_bindings: [
+                    Binding {
+                        name: "x",
+                        ty: Int,
+                        value: Span {
+                            target: Literal(
+                                Int(
+                                    5,
+                                ),
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 37,
+                                end: 38,
+                            },
+                        },
+                    },
+                ],
+                is_extern: false,
+                extern_name: None,
+            },
+        ),
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 2,
+        },
+    },
+)

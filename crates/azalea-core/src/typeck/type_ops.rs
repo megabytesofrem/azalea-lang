@@ -232,6 +232,7 @@ impl Typechecker {
                         args.clone(),
                         return_ty.clone(),
                         func.body_expr.clone().unwrap(),
+                        func.where_bindings.clone(),
                     );
 
                     return Ty::Fn(Box::new(func_type));

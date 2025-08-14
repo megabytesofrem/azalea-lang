@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::ast::ast_types::{Function, Record, RecordExpr, Ty};
 use crate::ast::pretty::Pretty;
@@ -318,6 +319,7 @@ impl Typechecker {
                     // External functions do not have a body since they aren't defined by us
                     body: None,
                     body_expr: None,
+                    where_bindings: vec![],
                     is_extern: true,
                     extern_name: extern_func.extern_name.clone(),
                 };
@@ -364,7 +366,23 @@ impl Typechecker {
                     body_expr: None,
                     is_extern: false,
                     extern_name: func_decl.extern_name.clone(),
+                    where_bindings: func_decl.where_bindings.clone(),
                 }));
+
+                // Add where bindings to the local environment
+                for binding in &func_decl.where_bindings {
+                    let binding_ty = self.infer_type(
+                        &mut local_env,
+                        &binding.value.target,
+                        binding.value.loc.clone(),
+                    )?;
+
+                    local_env.insert(binding.name.clone(), binding_ty.clone());
+
+                    self.resolver
+                        .define_variable(binding.name.clone(), binding_ty)
+                        .map_err(|_| SemanticError::RedefinedVariable(binding.name.clone()))?;
+                }
 
                 // Add the function to the local environment for recursive calls
                 local_env.insert(func_decl.name.clone(), initial_func_ty.clone());
@@ -433,6 +451,7 @@ impl Typechecker {
                     } else {
                         None
                     },
+                    where_bindings: vec![],
 
                     is_extern: false,
                     extern_name: func_decl.extern_name.clone(),

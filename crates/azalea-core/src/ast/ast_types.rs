@@ -73,6 +73,13 @@ impl Hash for Ty {
 /// A pair of a name and a type
 pub type TypedPair = (String, Ty);
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Binding {
+    pub name: String,
+    pub ty: Ty,
+    pub value: Box<Span<Expr>>,
+}
+
 /// Records are semantically equivalent to JavaScript objects
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
@@ -114,6 +121,9 @@ pub struct Function {
     // Optional body, if this is used in a function declaration
     pub body: Option<Vec<Span<Stmt>>>,
     pub body_expr: Option<Box<Span<Expr>>>, // If this is a lambda expression
+
+    // Optional where bindings, used for local bindings in a function
+    pub where_bindings: Vec<Binding>,
 
     // These fields are only used for extern functions
     pub is_extern: bool,
@@ -167,6 +177,7 @@ impl Function {
             return_ty,
             body: None,
             body_expr: None,
+            where_bindings: vec![],
             is_extern: false,
             extern_name: None,
         }
@@ -185,6 +196,7 @@ impl Function {
             return_ty,
             body: Some(body),
             body_expr: None,
+            where_bindings: vec![],
             is_extern: false,
             extern_name: None,
         }
@@ -195,6 +207,7 @@ impl Function {
         args: Vec<(String, Ty)>,
         return_ty: Ty,
         body_expr: Box<Span<Expr>>,
+        where_bindings: Vec<Binding>,
     ) -> Self {
         Self {
             name,
@@ -203,6 +216,7 @@ impl Function {
             return_ty,
             body: None,
             body_expr: Some(body_expr),
+            where_bindings,
             is_extern: false,
             extern_name: None,
         }
@@ -221,6 +235,7 @@ impl Function {
             return_ty,
             body: None,
             body_expr: None,
+            where_bindings: vec![],
             is_extern: true,
             extern_name: extern_name.into(),
         }
