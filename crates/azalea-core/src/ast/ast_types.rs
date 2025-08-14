@@ -1,6 +1,6 @@
 use std::{collections::HashSet, hash::Hash};
 
-use crate::parse::span::Span;
+use crate::{parse::span::Span, typeck::typecheck::Typechecker};
 
 use super::{Expr, Stmt};
 
@@ -84,7 +84,21 @@ pub struct Record {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
     pub name: String,
-    pub variants: Vec<String>,
+    pub type_params: Vec<String>,
+    pub variants: Vec<EnumVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnumVariantPayload {
+    None,                      // No payload, C style variant
+    Tuple(Vec<Ty>),            // Just(A), variant with a tuple payload
+    Record(Vec<(String, Ty)>), // Record-like variant
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub payload: EnumVariantPayload,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,7 +127,7 @@ pub struct RecordExpr {
 }
 
 impl Record {
-    pub fn to_type(&self) -> Ty {
+    pub fn to_type(&self, _tc: &mut Typechecker) -> Ty {
         Ty::TypeCons(
             self.name.clone(),
             self.type_params
@@ -125,11 +139,18 @@ impl Record {
 }
 
 impl Enum {
-    pub fn to_type(&self) -> Ty {
-        Ty::TypeCons(
-            self.name.clone(),
-            self.variants.iter().map(|_| Ty::Int).collect(),
-        )
+    pub fn to_type(&self, tc: &mut Typechecker) -> Ty {
+        if self.type_params.is_empty() {
+            Ty::TypeCons(self.name.clone(), vec![])
+        } else {
+            let params = self
+                .type_params
+                .iter()
+                .map(|param| Ty::Var(tc.fresh()))
+                .collect();
+
+            Ty::TypeCons(self.name.clone(), params)
+        }
     }
 }
 

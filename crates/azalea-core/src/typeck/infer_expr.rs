@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::ast_types::{Function, Record, RecordExpr, Ty};
+use crate::ast::ast_types::{EnumVariantPayload, Function, Record, RecordExpr, Ty};
 use crate::ast::pretty::Pretty;
 use crate::ast::{Expr, Literal};
 use crate::lexer::SourceLoc;
@@ -37,7 +37,7 @@ impl Typechecker {
                     if self.global_env.is_enum_defined(name) {
                         // If it's an enum, we can return the enum type directly
                         let enum_ty = self.global_env.lookup_enum(name).unwrap();
-                        return Ok(enum_ty.to_type());
+                        return Ok(enum_ty.to_type(&mut self.clone()));
                     }
 
                     return Err(SemanticError::UndefinedVariable(name.clone()));
@@ -51,7 +51,7 @@ impl Typechecker {
 
                 if self.global_env.is_record_defined(name) {
                     let record_ty = self.global_env.lookup_record(name).unwrap();
-                    return Ok(record_ty.to_type());
+                    return Ok(record_ty.to_type(&mut self.clone()));
                 }
 
                 // Then get the type from the typing environment (which tracks current types during inference)
@@ -121,6 +121,10 @@ impl Typechecker {
                         // If the target is an array type, return the inner type
                         Ok(params[0].clone())
                     }
+
+                    // Strings can be treated as arrays of characters
+                    Ty::String => Ok(Ty::String),
+
                     Ty::Array(inner) => {
                         // If the target is an array type, return the inner type
                         Ok(*inner.clone())
@@ -298,24 +302,56 @@ impl Typechecker {
                                 })
                             }
                         } else if self.global_env.is_enum_defined(&name) {
-                            // Enums are handled similar to records, but (for now) are simpler as they are
-                            // not sum types *this will change*
+                            let enum_decl = self.global_env.lookup_enum(&name).unwrap().clone();
 
-                            let enum_ty = self.global_env.lookup_enum(&name).unwrap();
-                            // println!(
-                            //     "DEBUG: Found enum '{}' with variants: {{{}}}",
-                            //     enum_ty.name,
-                            //     enum_ty
-                            //         .variants
-                            //         .iter()
-                            //         .map(|v| v.to_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join(", ")
-                            // );
+                            if let Some(variant) =
+                                enum_decl.variants.iter().find(|v| v.name == member.name)
+                            {
+                                match &variant.payload {
+                                    EnumVariantPayload::None => {
+                                        // If the variant has no payload, we can return the enum type directly
+                                        return Ok(enum_decl.to_type(&mut self.clone()));
+                                    }
+                                    EnumVariantPayload::Tuple(arg_tys) => {
+                                        // Constructor function like Maybe.Just -> Maybe[A]
 
-                            if enum_ty.variants.contains(&member.name) {
-                                Ok(enum_ty.to_type())
+                                        let arg_types = arg_tys
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, ty)| (format!("arg{}", i), ty.clone()))
+                                            .collect();
+
+                                        let func_ty = Function {
+                                            name: format!("{}.{}", name, member.name),
+                                            args: arg_types,
+                                            type_params: enum_decl.type_params.clone(),
+                                            return_ty: Ty::TypeCons(name.clone(), params.clone()),
+                                            body: None,
+                                            body_expr: None,
+                                            is_extern: false,
+                                            extern_name: None,
+                                        };
+
+                                        return Ok(Ty::Fn(Box::new(func_ty)));
+                                    }
+                                    EnumVariantPayload::Record(fields) => {
+                                        // Record style constructor like Person { name: String, age: Int }
+                                        let func_ty = Function {
+                                            name: format!("{}.{}", name, member.name),
+                                            args: fields.clone(),
+                                            type_params: vec![],
+                                            return_ty: Ty::TypeCons(name.clone(), params.clone()),
+                                            body: None,
+                                            body_expr: None,
+                                            is_extern: false,
+                                            extern_name: None,
+                                        };
+
+                                        return Ok(Ty::Fn(Box::new(func_ty)));
+                                    }
+                                }
                             } else {
+                                println!("DEBUG: Record {} not found in resolver", name);
                                 Err(SemanticError::UndefinedFieldOrVariant {
                                     field: member.name.clone(),
                                     structure: name,
@@ -323,12 +359,12 @@ impl Typechecker {
                                 })
                             }
                         } else {
-                            println!("DEBUG: Record {} not found in resolver", name);
-                            Err(SemanticError::UndefinedFieldOrVariant {
+                            // If the type is not a record or enum, we can't access members
+                            return Err(SemanticError::UndefinedFieldOrVariant {
                                 field: member.name.clone(),
                                 structure: name,
                                 location: member.target.loc.clone(),
-                            })
+                            });
                         }
                     }
                     // TODO: Change to expected one of many
@@ -382,6 +418,102 @@ impl Typechecker {
             Literal::String(_) => Ok(Ty::String),
             Literal::Bool(_) => Ok(Ty::Bool),
         }
+    }
+
+    fn infer_enum_type(
+        &mut self,
+        enum_name: &str,
+        variant_name: &str,
+        args: &[Expr],
+        env: &mut TypingEnv,
+        location: SourceLoc,
+    ) -> Return<Ty> {
+        // Check if the enum is defined in the global environment
+        if !self.global_env.is_enum_defined(enum_name) {
+            return Err(SemanticError::UndefinedVariable(enum_name.to_string()));
+        }
+
+        // Lookup the enum definition
+        let enum_decl = self.global_env.lookup_enum(enum_name).unwrap().clone();
+
+        let variant = enum_decl
+            .variants
+            .iter()
+            .find(|v| v.name == variant_name)
+            .ok_or_else(|| SemanticError::UndefinedFieldOrVariant {
+                field: variant_name.to_string(),
+                structure: enum_name.to_string(),
+                location: location.clone(),
+            })?;
+
+        // Check payload
+        match &variant.payload {
+            EnumVariantPayload::None => {
+                if !args.is_empty() {
+                    return Err(SemanticError::ArityMismatch {
+                        expected: 0,
+                        found: args.len(),
+                        location: location.clone(),
+                    });
+                }
+            }
+
+            EnumVariantPayload::Tuple(tys) => {
+                if args.len() != tys.len() {
+                    return Err(SemanticError::ArityMismatch {
+                        expected: tys.len(),
+                        found: args.len(),
+                        location: location.clone(),
+                    });
+                }
+
+                // Infer types of each argument and unify with expected types
+                for (arg, expected_ty) in args.iter().zip(tys.iter()) {
+                    let arg_ty = self.infer_type(env, arg, location.clone())?;
+                    self.unify(&arg_ty, expected_ty, location.clone())?;
+                }
+            }
+            EnumVariantPayload::Record(expected_fields) => {
+                if !args.is_empty() {
+                    return Err(SemanticError::ArityMismatch {
+                        expected: 0,
+                        found: args.len(),
+                        location: location.clone(),
+                    });
+                }
+
+                if let Some(Expr::Record(record_expr)) = args.first() {
+                    for (field_name, expected_ty) in expected_fields {
+                        // Check if the field exists in the record expression
+                        let field_expr = record_expr
+                            .fields
+                            .iter()
+                            .find(|(name, _)| name == field_name)
+                            .ok_or_else(|| SemanticError::UndefinedFieldOrVariant {
+                                field: field_name.clone(),
+                                structure: enum_name.to_string(),
+                                location: location.clone(),
+                            })?
+                            .1
+                            .clone();
+
+                        let field_ty = self.infer_type(env, &field_expr, location.clone())?;
+                        self.unify(&field_ty, &expected_ty, location.clone())?;
+                    }
+                } else {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: Ty::TypeCons(
+                            enum_name.to_string(),
+                            expected_fields.iter().map(|(_, ty)| ty.clone()).collect(),
+                        ),
+                        found: self.infer_type(env, &args[0], location.clone())?,
+                        location: location.clone(),
+                    });
+                }
+            }
+        }
+
+        Ok(enum_decl.to_type(&mut self.clone()))
     }
 
     fn infer_record_expr(

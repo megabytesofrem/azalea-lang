@@ -8,6 +8,8 @@ use super::error::ParserError;
 use crate::ast::Block;
 use crate::ast::ToplevelStmt;
 use crate::ast::ast_types::Enum;
+use crate::ast::ast_types::EnumVariant;
+use crate::ast::ast_types::EnumVariantPayload;
 use crate::ast::ast_types::Function;
 use crate::ast::ast_types::Record;
 use crate::ast::ast_types::Ty;
@@ -39,37 +41,39 @@ impl<'a> Parser<'a> {
             Some(TokenKind::Name) => {
                 // Look ahead to see if this is an assignment (name = expr)
                 // We'll save the current state and try parsing as assignment first
-                let name_token = self.next().unwrap(); // consume the name
+                // let name_token = self.next().unwrap(); // consume the name
+
+                let mut lhs = spanned(
+                    Expr::Ident(self.next().unwrap().literal.to_string()),
+                    location.clone(),
+                );
+
+                lhs = self.parse_postfix(lhs)?;
 
                 if self.peek().map(|t| t.kind) == Some(TokenKind::Eq) {
-                    // This is an assignment: name = expr
-                    self.next(); // consume the =
+                    // This is an assignment: target = expr
+                    self.next();
                     let value = self.parse_expr()?;
 
-                    Ok(spanned(
-                        Stmt::Assign {
-                            name: name_token.literal.to_string(),
-                            value: Box::new(value),
-                        },
-                        location,
-                    ))
+                    match &lhs.target {
+                        Expr::Ident(_) | Expr::MemberAccess(_) => Ok(spanned(
+                            Stmt::Assign {
+                                target: Box::new(lhs),
+                                value: Box::new(value),
+                            },
+                            location,
+                        )),
+
+                        _ => Err(ParserError::InvalidAssignment {
+                            target: lhs.target.clone(),
+                            location: lhs.loc.clone(),
+                        }),
+                    }
                 } else {
                     // This is an expression statement starting with a name
-                    // We need to "put back" the name token and parse the whole expression
-                    // Since we can't put back tokens, we'll create an Ident expression
-                    // and manually continue parsing the postfix operations
-
-                    // Start with the identifier
-                    let mut expr = spanned(
-                        Expr::Ident(name_token.literal.to_string()),
-                        name_token.location.clone(),
-                    );
-
-                    // Parse any postfix operations (function calls, member access, etc.)
-                    // We need to simulate what parse_expr would do
-                    expr = self.parse_remaining_expr(expr)?;
-
-                    Ok(spanned(Stmt::Expr(expr), location))
+                    // Continue parsing remaining binary operators
+                    lhs = self.parse_remaining_expr(lhs)?;
+                    Ok(spanned(Stmt::Expr(lhs), location))
                 }
             }
             _ => Err(ParserError::UnexpectedToken {
@@ -182,7 +186,7 @@ impl<'a> Parser<'a> {
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwFor)?;
-        let name = self.expect(TokenKind::Name)?.literal;
+        let target = self.parse_expr()?;
 
         self.expect(TokenKind::KwIn)?;
         println!("Parsing for loop, next token: {:?}", self.peek());
@@ -193,7 +197,7 @@ impl<'a> Parser<'a> {
 
         Ok(spanned(
             Stmt::For {
-                name: name.to_string(),
+                target: Box::new(target),
                 iterable: Box::new(iterable),
                 body,
             },
@@ -220,6 +224,71 @@ impl<'a> Parser<'a> {
             },
             location,
         ))
+    }
+
+    fn parse_enum_variant(&mut self, type_params: &HashSet<String>) -> parser::Return<EnumVariant> {
+        // Parse a single enum variant
+        // Supported formats:
+        // - simple_identifier: a simple identifier
+        // - Just(A): a variant with parameters
+        // - Just(A, B): a variant with multiple parameters
+        // - { field: ty, ... }: a variant with fields
+
+        let name = self.expect(TokenKind::Name)?.literal;
+
+        if self.peek().map(|t| t.kind) == Some(TokenKind::LParen) {
+            self.next();
+            let mut tys = Vec::new();
+
+            while self.peek().map(|t| t.kind) != Some(TokenKind::RParen) {
+                let ty = self.parse_primary_type(&type_params)?;
+                tys.push(ty);
+
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                    self.next(); // consume the comma
+                } else {
+                    break;
+                }
+            }
+
+            self.expect(TokenKind::RParen)?;
+
+            // Return the variant with its parameters
+            Ok(EnumVariant {
+                name: name.to_string(),
+                payload: EnumVariantPayload::Tuple(tys),
+            })
+        } else if self.peek().map(|t| t.kind) == Some(TokenKind::LBrace) {
+            // This is a record-like variant
+            self.next(); // consume '{'
+            let mut fields = Vec::new();
+
+            while self.peek().map(|t| t.kind) != Some(TokenKind::RBrace) {
+                let field_name = self.expect(TokenKind::Name)?.literal;
+                self.expect(TokenKind::Colon)?;
+                let field_ty = self.parse_primary_type(&HashSet::new())?;
+                fields.push((field_name.to_string(), field_ty));
+
+                if self.peek().map(|t| t.kind) != Some(TokenKind::Comma) {
+                    break;
+                }
+                self.next(); // consume the comma
+            }
+
+            self.expect(TokenKind::RBrace)?;
+
+            Ok(EnumVariant {
+                name: name.to_string(),
+                payload: EnumVariantPayload::Record(fields),
+            })
+        } else {
+            // Simple identifier variant
+            // No additional parsing needed, just return the name
+            Ok(EnumVariant {
+                name: name.to_string(),
+                payload: EnumVariantPayload::None,
+            })
+        }
     }
 
     pub(crate) fn parse_record_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
@@ -276,34 +345,61 @@ impl<'a> Parser<'a> {
             location,
         ))
     }
-
     pub(crate) fn parse_enum_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
-        // enum name = { variant1, variant2, ... }
+        // Parse an enum declaration. Enums are alsos known as algebraic data types (ADTs).
+
+        // Supported formats:
+        // enum Color = Red | Green | Blue
+        // enum Maybe[A] = Just(A) | Nothing
+        // enum Either[A, B] = Left(A) | Right(B)
+        // enum Animal = { name: String, age: u32 } | { name: String, age: u32, species: String }
+
+        self.skip_comments();
+
         let location = self.peek().map(|t| t.location).unwrap_or_default();
 
         self.expect(TokenKind::KwEnum)?;
         let name = self.expect(TokenKind::Name)?.literal;
 
-        self.expect(TokenKind::Eq)?;
+        let mut type_params = Vec::new();
+        println!("Peek token: {:?}", self.peek());
 
-        self.expect(TokenKind::LBrace)?;
-        let mut enum_variants = Vec::new();
-
-        while self.peek().map(|t| t.kind) != Some(TokenKind::RBrace) {
-            let variant = self.expect(TokenKind::Name)?.literal;
-            enum_variants.push(variant.to_string());
-
-            if self.peek().map(|t| t.kind) != Some(TokenKind::Comma) {
-                break;
+        // Parse type parameters if there are any
+        // Type parameters are enclosed in square brackets, e.g. `fn name[T, U]`
+        if self.peek().map(|t| t.kind) == Some(TokenKind::LSquare) {
+            self.next(); // consume '['
+            while let Some(TokenKind::Name) = self.peek().map(|t| t.kind) {
+                type_params.push(self.expect(TokenKind::Name)?.literal.to_string());
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Comma) {
+                    self.next();
+                } else {
+                    break;
+                }
             }
-            self.next();
+            self.expect(TokenKind::RSquare)?;
         }
 
-        self.expect(TokenKind::RBrace)?;
+        let type_param_ctx: HashSet<String> = type_params.iter().cloned().collect();
+
+        self.expect(TokenKind::Eq)?;
+
+        let mut enum_variants = Vec::new();
+
+        // Parse first variant (required)
+        let first_variant = self.parse_enum_variant(&type_param_ctx)?;
+        enum_variants.push(first_variant);
+
+        while self.peek().map(|t| t.kind) == Some(TokenKind::Pipe) {
+            self.next(); // consume the pipe
+
+            let variant = self.parse_enum_variant(&type_param_ctx)?;
+            enum_variants.push(variant);
+        }
 
         Ok(spanned(
             ToplevelStmt::EnumDecl(Enum {
                 name: name.to_string(),
+                type_params,
                 variants: enum_variants,
             }),
             location,

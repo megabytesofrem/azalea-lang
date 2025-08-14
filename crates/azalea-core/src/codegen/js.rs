@@ -1,9 +1,12 @@
-use crate::ast::ast_types::{Function, Ty};
+use std::collections::HashMap;
+
+use crate::ast::ast_types::{Enum, EnumVariant, EnumVariantPayload, Function, Ty};
 use crate::ast::pretty::Pretty;
-use crate::ast::{Expr, Literal, Stmt, ToplevelStmt};
+use crate::ast::{Expr, Literal, Member, Stmt, ToplevelStmt};
 use crate::codegen::pp::PrettyPrinter;
-use crate::lexer::Op;
-use crate::parse::span::Span;
+use crate::lexer::{Op, SourceLoc};
+use crate::parse::span::{Span, spanned};
+use crate::typeck::global_env::GlobalEnv;
 
 #[derive(Debug, Clone)]
 pub struct JSCodegen {
@@ -12,6 +15,9 @@ pub struct JSCodegen {
 
     /// The generated JavaScript code.
     pub js_code: String,
+
+    pub functions: HashMap<String, Function>,
+    pub global_env: GlobalEnv,
 }
 
 /// Trait for generating code from an AST.
@@ -83,18 +89,29 @@ impl JSCodegen {
             ast: Vec::new(),
             pp: PrettyPrinter::new(),
             js_code: String::new(),
+
+            functions: HashMap::new(),
+            global_env: GlobalEnv::new(),
         }
     }
 
     fn lookup_function(&self, name: &str) -> Option<Function> {
-        self.ast
-            .iter()
-            .filter_map(|span| match &span.target {
-                ToplevelStmt::FnDecl(func) if func.name == name => Some(func.clone()),
-                ToplevelStmt::ExternDecl(func) if func.name == name => Some(func.clone()), // ADD THIS LINE
-                _ => None,
-            })
-            .next()
+        self.functions.get(name).cloned()
+    }
+
+    fn lookup_enum(&self, name: &str) -> Option<&Enum> {
+        self.global_env.lookup_enum(name)
+    }
+
+    fn is_enum_variant(&self, member: &Member) -> bool {
+        // Split the member name into the enum name and variant name
+        let member_name = member.name.split(".").collect::<Vec<_>>()[0];
+        let enum_variant = member.name.split(".").collect::<Vec<_>>()[1];
+
+        if let Some(enum_decl) = self.lookup_enum(&member_name) {
+            return enum_decl.variants.iter().any(|v| v.name == enum_variant);
+        }
+        false
     }
 
     fn visit_bin_op(&mut self, left: &Expr, op: &Op, right: &Expr) -> String {
@@ -105,8 +122,28 @@ impl JSCodegen {
             Op::Sub => format!("{} - {}", left_js, right_js),
             Op::Mul => format!("{} * {}", left_js, right_js),
             Op::Div => format!("{} / {}", left_js, right_js),
-            Op::DoubleEq => format!("{} === {}", left_js, right_js),
-            Op::NotEq => format!("{} !== {}", left_js, right_js),
+            Op::DoubleEq => {
+                // Special case for equality check
+                if self.is_enum_variant(&Member {
+                    target: Box::new(spanned(left.clone(), SourceLoc::default())),
+                    name: right_js.clone(),
+                }) {
+                    return format!("{}.tag === '{}'", left_js, right_js);
+                }
+
+                format!("{} === {}", left_js, right_js)
+            }
+            Op::NotEq => {
+                // Special case for inequality check
+                if self.is_enum_variant(&Member {
+                    target: Box::new(spanned(left.clone(), SourceLoc::default())),
+                    name: right_js.clone(),
+                }) {
+                    return format!("{}.tag !== '{}'", left_js, right_js);
+                }
+
+                format!("{} !== {}", left_js, right_js)
+            }
             Op::Less => format!("{} < {}", left_js, right_js),
             Op::LessEq => format!("{} <= {}", left_js, right_js),
             Op::Greater => format!("{} > {}", left_js, right_js),
@@ -363,6 +400,11 @@ impl Emit for JSCodegen {
                     .iter()
                     .map(|(name, ty)| format!("{}: {}", name, default_js_value(ty)))
                     .collect();
+
+                if !self.global_env.is_record_defined(&record.name) {
+                    self.global_env.define_record(record.clone());
+                }
+
                 format!(
                     "const /*record*/ {} = {{ {} }};",
                     record.name,
@@ -371,19 +413,78 @@ impl Emit for JSCodegen {
             }
 
             ToplevelStmt::EnumDecl(enum_decl) => {
-                // Format { name: variant } for each variant
-                let variant_map: Vec<String> = enum_decl
-                    .variants
-                    .iter()
-                    .enumerate()
-                    .map(|(i, variant)| format!("{}: {}", variant, i))
-                    .collect();
+                let mut constructors = HashMap::new();
 
-                format!(
-                    "const /*enum*/ {} = {{ {} }};",
-                    enum_decl.name,
-                    variant_map.join(", ")
-                )
+                if !self.global_env.is_enum_defined(&enum_decl.name) {
+                    self.global_env.define_enum(enum_decl.clone());
+                }
+
+                for variant in &enum_decl.variants {
+                    match &variant.payload {
+                        EnumVariantPayload::None => {
+                            constructors.insert(
+                                variant.name.clone(),
+                                (
+                                    format!("{}_{}", enum_decl.name, variant.name),
+                                    format!(
+                                        "const {}_{} = {{ tag: '{}' }};",
+                                        enum_decl.name, variant.name, variant.name,
+                                    ),
+                                ),
+                            );
+                        }
+
+                        EnumVariantPayload::Tuple(args) => {
+                            let arg_names = (0..args.len())
+                                .map(|i| format!("arg{}", i))
+                                .collect::<Vec<_>>();
+
+                            constructors.insert(
+                                variant.name.clone(),
+                                (
+                                    format!("{}_{}", enum_decl.name, variant.name),
+                                    format!(
+                                        "function {}_{}({}) {{ return {{ tag: '{}', values: [{}] }}; }}",
+                                        enum_decl.name,
+                                        variant.name,
+                                        arg_names.join(", "),
+                                        variant.name,
+                                        arg_names.join(", ")
+                                    ),
+                                ),
+                            );
+                        }
+
+                        EnumVariantPayload::Record(fields) => {
+                            constructors.insert(variant.name.clone(), (
+                                format!("{}_{}", enum_decl.name, variant.name),
+                                format!(
+                                    "function {}_{}(record) {{ return {{ tag: '{}', ...record }}; }}",
+                                    enum_decl.name, variant.name, variant.name
+                                ),
+                            ));
+                        }
+                    }
+                }
+
+                let mut code = String::new();
+
+                code.push_str(&format!("// Constructors for {}\n\n", enum_decl.name));
+                for (_name, (_, body)) in &constructors {
+                    code.push_str(&self.pp.print(&format!("{}\n", body)));
+                }
+
+                code.push_str(&format!("// Object for enum {}\n", enum_decl.name));
+                code.push_str(&format!("const /*enum*/ {} = {{\n", enum_decl.name));
+
+                for (name, (key, _)) in &constructors {
+                    self.pp.indent();
+                    code.push_str(&self.pp.print(&format!("{}: {},\n", name, key)));
+                    self.pp.dedent();
+                }
+                code.push_str("};\n");
+
+                code
             }
 
             ToplevelStmt::ExternDecl(func) => {
@@ -391,6 +492,10 @@ impl Emit for JSCodegen {
                 // without any body, as they are expected to be defined in JS.
                 let func_args: Vec<String> =
                     func.args.iter().map(|(name, _ty)| name.clone()).collect();
+
+                if !self.global_env.is_extern_function(&func.name) {
+                    self.global_env.define_extern(func.clone());
+                }
 
                 format!(
                     "/* extern: function {}({}) */",
@@ -403,6 +508,10 @@ impl Emit for JSCodegen {
                 // Discard any type information for JS
                 let func_args: Vec<String> =
                     func.args.iter().map(|(name, _ty)| name.clone()).collect();
+
+                if !self.functions.contains_key(&func.name) {
+                    self.functions.insert(func.name.clone(), func.clone());
+                }
 
                 let body_emit = if func.body.is_none() {
                     // Single expression function
@@ -450,21 +559,24 @@ impl Emit for JSCodegen {
                 format!("let /*mut*/ {} = {};", name, value_emit)
             }
 
-            Stmt::Assign { name, value } => {
+            Stmt::Assign { target, value } => {
+                let target_emit = self.visit_expr(&target.target);
                 let value_emit = self.visit_expr(&value.target);
-                format!("{} = {};", name, value_emit)
+                format!("{} = {};", target_emit, value_emit)
             }
 
             Stmt::For {
-                name,
+                target,
                 iterable,
                 body,
             } => {
+                let target_emit = self.visit_expr(&target.target);
                 let iterable_emit = self.visit_expr(&iterable.target);
                 let body_emit = self.visit_block(body.clone());
+
                 format!(
                     "for (const {} of {}) {{\n{}\n}}",
-                    name, iterable_emit, body_emit
+                    target_emit, iterable_emit, body_emit
                 )
             }
 

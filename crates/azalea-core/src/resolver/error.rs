@@ -36,6 +36,13 @@ pub enum SemanticError {
         found: usize,
         location: SourceLoc,
     },
+
+    InvalidAssignment {
+        location: SourceLoc,
+    },
+    InvalidTarget {
+        location: SourceLoc,
+    },
 }
 
 impl SemanticError {
@@ -108,6 +115,19 @@ impl SemanticError {
                 location,
             } => ErrorReport::new(
                 format!("Arity mismatch: expected {}, found {}", expected, found),
+                "Semantic error".to_string(),
+                location.clone(),
+            ),
+
+            SemanticError::InvalidAssignment { location } => ErrorReport::new(
+                "Invalid assignment target".to_string(),
+                "Semantic error".to_string(),
+                location.clone(),
+            )
+            .with_hint("Assignment target must be a variable or member access".to_string()),
+
+            SemanticError::InvalidTarget { location } => ErrorReport::new(
+                "Invalid target".to_string(),
                 "Semantic error".to_string(),
                 location.clone(),
             ),

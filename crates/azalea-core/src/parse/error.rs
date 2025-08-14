@@ -1,4 +1,5 @@
 use crate::{
+    ast::Expr,
     error::error_report::ErrorReport,
     lexer::{LexicalError, SourceLoc, TokenKind},
 };
@@ -26,6 +27,11 @@ pub enum ParserError {
     InvalidArrayIndex(SourceLoc),
     InvalidFunctionCall(SourceLoc),
     InvalidRecordFormat(SourceLoc),
+
+    InvalidAssignment {
+        target: Expr,
+        location: SourceLoc,
+    },
 
     /// A lexical error that occurred during tokenization
     LexicalError(LexicalError),
@@ -102,6 +108,12 @@ impl ParserError {
                 "Syntax error".to_string(),
                 location.clone(),
             ),
+
+            ParserError::InvalidAssignment { target, location } => {
+                let message = format!("Invalid assignment target: {:?}", target);
+                ErrorReport::new(message, "Syntax error".to_string(), location.clone())
+                    .with_hint("Assignment targets must be variables or properties".to_string())
+            }
 
             ParserError::LexicalError(lex_error) => {
                 let (message, source, location, hint) = match lex_error {

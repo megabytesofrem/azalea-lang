@@ -77,7 +77,7 @@ fn valid_string_literal(lex: &mut logos::Lexer<TokenKind>) -> Result<(), Lexical
         if c == '\\' {
             match chars.next() {
                 // Valid escape sequences
-                Some('n') | Some('t') | Some('r') | Some('\\') | Some('"') => continue,
+                Some('n') | Some('t') | Some('r') | Some('\\') | Some('"') | Some('0') => continue,
 
                 Some(invalid) => {
                     return Err(LexicalError::BadEscapeSequence {
@@ -190,6 +190,8 @@ pub enum TokenKind {
     Lambda,
     #[token("->")]
     Arrow,
+    #[token("|")]
+    Pipe,
 
     // Keywords
     #[token("pub")]
@@ -249,7 +251,7 @@ pub enum TokenKind {
     #[regex(r#""(\\[\\"]|[^"])*""#, |lex| valid_string_literal(lex))]
     StringLit,
 
-    #[regex(r"--.*\n?")]
+    #[regex(r"--.*\n?", logos::skip)]
     Comment,
 
     // We ignore whitespace in the lexer

@@ -60,12 +60,12 @@ pub enum Stmt {
 
     /// An assignment statement: name = expr
     Assign {
-        name: String,
+        target: Box<Span<Expr>>,
         value: Box<Span<Expr>>,
     },
 
     For {
-        name: String,
+        target: Box<Span<Expr>>,
         iterable: Box<Span<Expr>>,
         body: Vec<Span<Stmt>>,
     },

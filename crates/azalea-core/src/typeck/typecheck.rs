@@ -280,8 +280,12 @@ impl Typechecker {
             ToplevelStmt::Stmt(stmt) => self.check(env, stmt, location),
 
             ToplevelStmt::RecordDecl(record) => {
-                let ty = record.to_type();
-                let local_subst = self.unify(&ty, &record.to_type(), toplevel.loc.clone())?;
+                let ty = record.to_type(&mut self.clone());
+                let local_subst = self.unify(
+                    &ty,
+                    &record.to_type(&mut self.clone()),
+                    toplevel.loc.clone(),
+                )?;
                 env.extend(local_subst);
                 self.global_env.define_record(record.clone());
                 env.insert(record.name.clone(), ty);
@@ -289,8 +293,12 @@ impl Typechecker {
             }
 
             ToplevelStmt::EnumDecl(enum_decl) => {
-                let ty = enum_decl.to_type();
-                let local_env = self.unify(&ty, &enum_decl.to_type(), toplevel.loc.clone())?;
+                let ty = enum_decl.to_type(self);
+                let local_env = self.unify(
+                    &ty,
+                    &enum_decl.to_type(&mut self.clone()),
+                    toplevel.loc.clone(),
+                )?;
                 env.extend(local_env);
                 self.global_env.define_enum(enum_decl.clone());
                 env.insert(enum_decl.name.clone(), ty);
@@ -457,6 +465,19 @@ impl Typechecker {
         }
     }
 
+    fn extract_ident_name(
+        &mut self,
+        expr: &Expr,
+        location: &SourceLoc,
+    ) -> Result<String, SemanticError> {
+        match expr {
+            Expr::Ident(name) => Ok(name.clone()),
+            _ => Err(SemanticError::InvalidTarget {
+                location: location.clone(),
+            }),
+        }
+    }
+
     pub fn check(
         &mut self,
         env: &mut TypingEnv,
@@ -516,26 +537,62 @@ impl Typechecker {
                 Ok(())
             }
 
-            Stmt::Assign { name, value } => {
+            Stmt::Assign { target, value } => {
                 // For assignment statements, we need to check that the variable exists
                 // and that the value type matches the variable type
-                let var_ty = env
-                    .get(name)
-                    .cloned()
-                    .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
 
+                let target_ty = self.infer_type(env, &target.target, target.loc.clone())?;
                 let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
-                self.unify(&var_ty, &value_ty, value.loc.clone())?;
+
+                // Unify the types
+                self.unify(&target_ty, &value_ty, target.loc.clone())?;
+
+                match &target.target {
+                    Expr::Ident(name) => {
+                        // Check if the variable is defined in the environment
+                        if !env.contains_key(name) {
+                            return Err(SemanticError::UndefinedVariable(name.clone()));
+                        }
+
+                        // Update the type of the variable in the environment
+                        let var_ty = env.get_mut(name).unwrap();
+                        *var_ty = value_ty;
+                    }
+
+                    Expr::MemberAccess(member) => {
+                        // For member assignments, we need to ensure the member exists
+                        // and update its type accordingly
+                        // let target_ty = self.infer_type(env, &member., member.loc.clone())?;
+
+                        return Ok(());
+                    }
+
+                    _ => {
+                        return Err(SemanticError::InvalidAssignment {
+                            location: target.loc.clone(),
+                        });
+                    }
+                }
+
+                // let var_ty = env
+                //     .get(name)
+                //     .cloned()
+                //     .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
+
+                // let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
+                // self.unify(&var_ty, &value_ty, value.loc.clone())?;
 
                 Ok(())
             }
 
             Stmt::For {
-                name,
+                target,
                 iterable,
                 body,
             } => {
                 let iterable_ty = self.infer_type(env, &iterable.target, iterable.loc.clone())?;
+
+                let name = self.extract_ident_name(&target.target, &target.loc)?;
 
                 // For now, this only supports arrays as iterables
                 let iterable_elem_ty = match iterable_ty {
@@ -572,7 +629,7 @@ impl Typechecker {
                         location,
                     })?;
 
-                env.remove(name);
+                env.remove(&name);
                 Ok(())
             }
 

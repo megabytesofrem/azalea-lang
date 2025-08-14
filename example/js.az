@@ -4,8 +4,11 @@ extern fn "Math.sqrt" math_sqrt(x: Float): Float
 extern fn "Math.abs" math_abs(x: Float): Float
 extern fn "Math.random" math_random(): Float
 
--- Enums are not (yet) sum types, but like C enums
-enum Color = { red, green, blue }
+-- Enums are ADTs/sum types
+enum Color = 
+    red  -- red
+  | green -- green
+  | blue  -- blue 
 
 fn main() = do
   console_log("Hello, Azalea!")

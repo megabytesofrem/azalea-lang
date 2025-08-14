@@ -57,14 +57,21 @@ impl<'a> Parser<'a> {
         parser
     }
 
+    // Helper function to skip comments and whitespace
+    pub fn skip_comments(&mut self) {
+        while self.peek().map(|t| t.kind) == Some(TokenKind::Comment)
+            || self.peek().map(|t| t.kind) == Some(TokenKind::Whitespace)
+        {
+            self.next();
+        }
+    }
+
     // Parser driver function
     pub fn parse(token_stream: lexer::LexerIter<'a>) -> base::Return<'a, Parser<'a>> {
         let mut parser = Parser::new(token_stream);
 
         // Skip any comments
-        while parser.peek().map(|t| t.kind) == Some(TokenKind::Comment) {
-            parser.next(); // consume the comment token
-        }
+        parser.skip_comments();
 
         // Parse multiple top-level statements until EOF
         while parser.peek().is_some() {
@@ -87,9 +94,7 @@ impl<'a> Parser<'a> {
         // let start_location = self.peek().map(|t| t.location).unwrap_or_default();
 
         // Skip any comments
-        while self.peek().map(|t| t.kind) == Some(TokenKind::Comment) {
-            self.next(); // consume the comment token
-        }
+        self.skip_comments();
 
         match self.peek().map(|t| t.kind) {
             Some(TokenKind::KwRecord) => Ok(self.parse_record_decl()?),
