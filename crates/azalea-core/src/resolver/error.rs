@@ -43,6 +43,7 @@ pub enum SemanticError {
     InvalidTarget {
         location: SourceLoc,
     },
+    NoMatch,
 }
 
 impl SemanticError {
@@ -130,6 +131,12 @@ impl SemanticError {
                 "Invalid target".to_string(),
                 "Semantic error".to_string(),
                 location.clone(),
+            ),
+
+            SemanticError::NoMatch => ErrorReport::new(
+                "No matching branch found".to_string(),
+                "Semantic error".to_string(),
+                SourceLoc::default(),
             ),
         }
     }

@@ -1,0 +1,59 @@
+---
+source: crates/azalea-core/src/parse/tests.rs
+expression: output
+---
+SOURCE:
+let x = match x | x -> x
+
+AST:
+Ok(
+    Span {
+        target: Let {
+            name: "x",
+            ty: Unresolved,
+            value: Span {
+                target: Match(
+                    PatternMatch {
+                        target: Span {
+                            target: Ident(
+                                "x",
+                            ),
+                            loc: SourceLoc {
+                                line: 1,
+                                start: 14,
+                                end: 15,
+                            },
+                        },
+                        branches: [
+                            Branch {
+                                pattern: Capture(
+                                    "x",
+                                ),
+                                expr: Span {
+                                    target: Ident(
+                                        "x",
+                                    ),
+                                    loc: SourceLoc {
+                                        line: 1,
+                                        start: 23,
+                                        end: 24,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ),
+                loc: SourceLoc {
+                    line: 1,
+                    start: 0,
+                    end: 0,
+                },
+            },
+        },
+        loc: SourceLoc {
+            line: 1,
+            start: 0,
+            end: 3,
+        },
+    },
+)

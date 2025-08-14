@@ -194,6 +194,8 @@ pub enum TokenKind {
     Pipe,
     #[token("$")]
     Dollar,
+    #[token("_", priority = 1)]
+    Underscore,
 
     // Keywords
     #[token("pub")]
@@ -220,6 +222,10 @@ pub enum TokenKind {
     KwImport,
     #[token("if")]
     KwIf,
+    #[token("match")]
+    KwMatch,
+    #[token("case")]
+    KwCase,
     #[token("then")]
     KwThen,
     #[token("else")]
@@ -289,6 +295,7 @@ pub enum Op {
     Neg,
     Not,
     Dollar,
+    Wildcard,
 }
 
 // Wrapper type for a peekable iterator over lexing results

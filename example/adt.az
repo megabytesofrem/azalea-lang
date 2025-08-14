@@ -3,12 +3,6 @@ enum Gender =
     Male
   | Female
   | Other(String)
-
-enum Animal =
-    Dog { age_in_dog_years: Int }
-  | Cat { age_in_cat_years: Int }
-  | OtherAnimal(String)
-
 fn print_gender(g: Gender) = 
   if g == Gender.Male then
     "Male"

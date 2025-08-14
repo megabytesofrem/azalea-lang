@@ -1,6 +1,6 @@
 use std::{collections::HashSet, hash::Hash};
 
-use crate::{parse::span::Span, typeck::typecheck::Typechecker};
+use crate::{ast::Literal, parse::span::Span, typeck::typecheck::Typechecker};
 
 use super::{Expr, Stmt};
 
@@ -78,6 +78,38 @@ pub struct Binding {
     pub name: String,
     pub ty: Ty,
     pub value: Box<Span<Expr>>,
+}
+
+/// A pattern that can be used in a pattern match
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Literal(Literal),
+
+    // A pattern that matches a single identifier
+    Capture(String),
+
+    // List partition, e.g. [x:xs]
+    Partition(Box<Pattern>, Box<Pattern>),
+
+    // Matches a list of patterns
+    List(Vec<Box<Pattern>>),
+
+    // A wildcard pattern that matches anything
+    Wildcard,
+}
+
+/// A pattern match expression
+#[derive(Debug, Clone, PartialEq)]
+pub struct PatternMatch {
+    pub target: Box<Span<Expr>>,
+    pub branches: Vec<Branch>,
+}
+
+/// A branch of a pattern match
+#[derive(Debug, Clone, PartialEq)]
+pub struct Branch {
+    pub pattern: Pattern,
+    pub expr: Box<Span<Expr>>,
 }
 
 /// Records are semantically equivalent to JavaScript objects

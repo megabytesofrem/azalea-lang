@@ -143,3 +143,11 @@ fn where_clause() {
     let output = format!("SOURCE:\n{}\n\nAST:\n{:#?}", src, result);
     assert_snapshot!(output);
 }
+
+#[test]
+fn pattern_match() {
+    let src = "let x = match x | x -> x";
+    let result = parse_stmt!(src);
+    let output = format!("SOURCE:\n{}\n\nAST:\n{:#?}", src, result);
+    assert_snapshot!(output);
+}

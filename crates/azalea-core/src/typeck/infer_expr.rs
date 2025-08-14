@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::ast_types::{EnumVariantPayload, Function, Record, RecordExpr, Ty};
+use crate::ast::ast_types::{EnumVariantPayload, Function, Pattern, Record, RecordExpr, Ty};
 use crate::ast::pretty::Pretty;
 use crate::ast::{Expr, Literal};
 use crate::lexer::{Op, SourceLoc};
@@ -221,6 +221,39 @@ impl Typechecker {
                 Ok(then_ty)
             }
 
+            Expr::Match(pmatch) => {
+                let scrutinee_ty =
+                    self.infer_type(env, &pmatch.target.target, pmatch.target.loc.clone())?;
+
+                let mut branch_result_ty = None;
+                for branch in &pmatch.branches {
+                    let mut branch_env = env.clone();
+
+                    self.check_pattern(
+                        &mut branch_env,
+                        &branch.pattern,
+                        &scrutinee_ty,
+                        location.clone(),
+                    )?;
+
+                    // Type check the branch expression
+                    let branch_ty = self.infer_type(
+                        &mut branch_env,
+                        &branch.expr.target,
+                        branch.expr.loc.clone(),
+                    )?;
+
+                    if let Some(ref ty) = branch_result_ty {
+                        // If we already have a branch type, unify it with the new one
+                        self.unify(ty, &branch_ty, branch.expr.loc.clone())?;
+                    } else {
+                        branch_result_ty = Some(branch_ty);
+                    }
+                }
+
+                branch_result_ty.ok_or(SemanticError::NoMatch)
+            }
+
             Expr::Lam { .. } => self.infer_lam(&expr, env, location.clone()),
 
             Expr::MemberAccess(member) => {
@@ -435,10 +468,10 @@ impl Typechecker {
 
     fn infer_enum_type(
         &mut self,
+        env: &mut TypingEnv,
         enum_name: &str,
         variant_name: &str,
         args: &[Expr],
-        env: &mut TypingEnv,
         location: SourceLoc,
     ) -> Return<Ty> {
         // Check if the enum is defined in the global environment
@@ -606,6 +639,85 @@ impl Typechecker {
         }
 
         Ok(Ty::TypeCons(record_decl.name.clone(), instantiated_params))
+    }
+
+    fn check_pattern(
+        &mut self,
+        env: &mut TypingEnv,
+        pattern: &Pattern,
+        scrutinee_ty: &Ty,
+        location: SourceLoc,
+    ) -> Return<()> {
+        match pattern {
+            Pattern::Literal(lit) => {
+                // Infer the literals type
+                let literal_ty = self.infer_literal(lit, env, location.clone())?;
+                self.unify(&literal_ty, scrutinee_ty, location.clone())?;
+                Ok(())
+            }
+
+            Pattern::Capture(name) => {
+                env.insert(name.clone(), scrutinee_ty.clone());
+                self.resolver
+                    .define_variable(name.clone(), scrutinee_ty.clone())
+                    .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
+
+                Ok(())
+            }
+
+            Pattern::Wildcard => {
+                // Wildcard patterns match anything
+                Ok(())
+            }
+
+            Pattern::Partition(head, tail) => {
+                // For a pattern in the form of [x:xs], this only works on arrays and tuples
+                match scrutinee_ty {
+                    Ty::TypeCons(name, params) if name == "Array" && params.len() == 1 => {
+                        let elem_ty = &params[0];
+                        self.check_pattern(env, head, elem_ty, location.clone())?;
+                        Ok(self.check_pattern(env, tail, scrutinee_ty, location.clone())?)
+                    }
+
+                    Ty::Array(elem_ty) => {
+                        self.check_pattern(env, head, &elem_ty, location.clone())?;
+                        Ok(self.check_pattern(env, tail, scrutinee_ty, location.clone())?)
+                    }
+                    // TODO: Add tuple support
+                    _ => Err(SemanticError::TypeMismatch {
+                        expected: Ty::TypeCons("Array".into(), vec![Ty::Any]),
+                        found: scrutinee_ty.clone(),
+                        location: location.clone(),
+                    }),
+                }
+            }
+
+            Pattern::List(elems) => {
+                // For a pattern in the form of [a, b, c], we expect an array type
+                match scrutinee_ty {
+                    Ty::TypeCons(name, params) if name == "Array" && params.len() == 1 => {
+                        let elem_ty = &params[0];
+                        for elem in elems {
+                            self.check_pattern(env, elem, elem_ty, location.clone())?;
+                        }
+                        Ok(())
+                    }
+
+                    Ty::Array(elem_ty) => {
+                        for elem in elems {
+                            self.check_pattern(env, elem, &elem_ty, location.clone())?;
+                        }
+                        Ok(())
+                    }
+
+                    _ => Err(SemanticError::TypeMismatch {
+                        expected: Ty::TypeCons("Array".into(), vec![Ty::Any]),
+                        found: scrutinee_ty.clone(),
+                        location: location.clone(),
+                    }),
+                }
+            }
+        }
     }
 
     pub fn check_record_against_expected_type(

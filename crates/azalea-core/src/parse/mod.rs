@@ -2,6 +2,7 @@ pub mod base;
 pub mod error;
 pub mod expr;
 pub mod op;
+pub mod pattern;
 pub mod span;
 pub mod stmt;
 pub mod type_;

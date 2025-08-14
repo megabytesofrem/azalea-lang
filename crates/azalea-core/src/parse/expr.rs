@@ -107,6 +107,12 @@ impl<'a> Parser<'a> {
                 self.parse_if()
             }
 
+            TokenKind::KwMatch => {
+                // Match expression
+                println!("Parsing match expression");
+                self.parse_match()
+            }
+
             TokenKind::Lambda => {
                 println!("Parsing lambda expression");
                 self.parse_lambda()
@@ -266,7 +272,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_literal(&mut self, token: &Token) -> parser::Return<Literal> {
+    pub fn parse_literal(&mut self, token: &Token) -> parser::Return<Literal> {
         let location = self.next().map(|t| t.location).unwrap_or_default();
 
         match token.kind {

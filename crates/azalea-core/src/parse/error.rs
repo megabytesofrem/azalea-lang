@@ -37,6 +37,7 @@ pub enum ParserError {
     LexicalError(LexicalError),
 
     UnexpectedEOF,
+    InvalidPattern,
 }
 
 impl ParserError {
@@ -179,6 +180,12 @@ impl ParserError {
 
                 report
             }
+
+            ParserError::InvalidPattern => ErrorReport::new(
+                "Invalid pattern".to_string(),
+                "Syntax error".to_string(),
+                SourceLoc::default(),
+            ),
 
             ParserError::UnexpectedEOF => ErrorReport::new(
                 "Unexpected end of file (EOF)".to_string(),

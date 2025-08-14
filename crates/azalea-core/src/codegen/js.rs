@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::ast_types::{Enum, EnumVariant, EnumVariantPayload, Function, Ty};
+use crate::ast::ast_types::{Enum, EnumVariant, EnumVariantPayload, Function, Pattern, Ty};
 use crate::ast::pretty::Pretty;
 use crate::ast::{Expr, Literal, Member, Stmt, ToplevelStmt};
 use crate::codegen::pp::PrettyPrinter;
@@ -19,6 +19,7 @@ pub struct JSCodegen {
     // Used to map scoped bindings e.g `let x = 5;` to `freeze.x`
     relative_to_binding: Option<String>,
     relative_bindings: HashSet<String>,
+    match_counter: usize,
 
     pub functions: HashMap<String, Function>,
     pub global_env: GlobalEnv,
@@ -26,11 +27,11 @@ pub struct JSCodegen {
 
 /// Trait for generating code from an AST.
 pub trait Emit {
-    fn visit_expr(&mut self, expr: &Expr) -> String;
-    fn visit_toplevel(&mut self, toplevel: &ToplevelStmt) -> String;
-    fn visit_stmt(&mut self, stmt: &Stmt) -> String;
+    fn emit_expr(&mut self, expr: &Expr) -> String;
+    fn emit_toplevel(&mut self, toplevel: &ToplevelStmt) -> String;
+    fn emit_stmt(&mut self, stmt: &Stmt) -> String;
 
-    fn visit_block(&mut self, block: Vec<Span<Stmt>>) -> String;
+    fn emit_block(&mut self, block: Vec<Span<Stmt>>) -> String;
 
     fn emit_code(&mut self, ast: Vec<Span<ToplevelStmt>>);
 }
@@ -47,15 +48,15 @@ pub fn desugar_to_ternary(
         panic!("Cannot handle multi-statement branches in a ternary");
     }
 
-    let then_str = emit.visit_stmt(&then.first().unwrap().target);
+    let then_str = emit.emit_stmt(&then.first().unwrap().target);
 
     let else_str = else_
-        .map(|else_block| emit.visit_stmt(&else_block.first().unwrap().target))
+        .map(|else_block| emit.emit_stmt(&else_block.first().unwrap().target))
         .unwrap_or_else(|| "undefined".to_string());
 
     format!(
         "({} ? {} : {})",
-        emit.visit_expr(&cond.target).replace("\n", ""),
+        emit.emit_expr(&cond.target).replace("\n", ""),
         then_str.replace("\n", ""),
         else_str.replace("\n", "")
     )
@@ -95,6 +96,7 @@ impl JSCodegen {
             js_code: String::new(),
             relative_to_binding: None,
             relative_bindings: HashSet::new(),
+            match_counter: 0,
 
             functions: HashMap::new(),
             global_env: GlobalEnv::new(),
@@ -109,9 +111,15 @@ impl JSCodegen {
         self.global_env.lookup_enum(name)
     }
 
+    /// Generate a unique match ID for pattern matching.
+    fn unique_match_id(&mut self) -> String {
+        let id = format!("_match_scrut_{}", self.match_counter);
+        self.match_counter += 1;
+        id
+    }
+
     fn is_enum_variant(&self, member: &Member) -> bool {
         // Split the member name into the enum name and variant name
-
         // Check if this is a member of an enum variant
         if !member.name.contains('.') {
             return false;
@@ -126,9 +134,9 @@ impl JSCodegen {
         false
     }
 
-    fn visit_bin_op(&mut self, left: &Expr, op: &Op, right: &Expr) -> String {
-        let left_js = self.visit_expr(left);
-        let right_js = self.visit_expr(right);
+    fn emit_bin_op(&mut self, left: &Expr, op: &Op, right: &Expr) -> String {
+        let left_js = self.emit_expr(left);
+        let right_js = self.emit_expr(right);
         match op {
             Op::Add => format!("{} + {}", left_js, right_js),
             Op::Sub => format!("{} - {}", left_js, right_js),
@@ -165,11 +173,81 @@ impl JSCodegen {
 
             Op::Dollar => {
                 // Special case for curried function calls using dollar
-                let target = self.visit_expr(left);
-                let arg = self.visit_expr(right);
+                let target = self.emit_expr(left);
+                let arg = self.emit_expr(right);
                 format!("{}({})", target, arg)
             }
             _ => panic!("Unsupported binary operator: {:?}", op),
+        }
+    }
+
+    /// Emit a pattern check for a given pattern against a scrutinee.
+    ///
+    /// Patterns are desugared to `if` checks against the scrutinee.
+    fn emit_pattern_check(
+        &mut self,
+        pattern: &Pattern,
+        scrutinee: &str,
+        bindings: &mut Vec<(String, String)>,
+    ) -> String {
+        match pattern {
+            Pattern::Literal(lit) => {
+                let emit_literal = match lit {
+                    Literal::Int(i) => format!("{}|0", i.to_string()),
+                    Literal::Float(f) => f.to_string(),
+                    Literal::String(s) => format!("{}", s),
+                    Literal::Bool(b) => b.to_string(),
+                };
+
+                format!("{} === {}", scrutinee, emit_literal)
+            }
+
+            Pattern::Capture(name) => {
+                // Bind the capture to the entire scrutinee
+                bindings.push((name.clone(), scrutinee.to_string()));
+                "true".to_string()
+            }
+
+            Pattern::List(elems) => {
+                let mut checks = Vec::new();
+                checks.push(format!("Array.isArray({})", scrutinee));
+                checks.push(format!("{}.length === {}", scrutinee, elems.len()));
+
+                for (i, pat) in elems.iter().enumerate() {
+                    let elem_scrut = format!("{}[{}]", scrutinee, i);
+                    let c = self.emit_pattern_check(&pat, &elem_scrut, bindings);
+                    checks.push(c);
+                }
+
+                checks.join(" && ")
+            }
+
+            Pattern::Partition(head, tail) => {
+                // [x:xs] pattern
+                let mut checks = Vec::new();
+                checks.push(format!("Array.isArray({})", scrutinee));
+                checks.push(format!("{}.length >= 1", scrutinee));
+
+                let head_scrut = format!("{}[0]", scrutinee);
+                checks.push(self.emit_pattern_check(&head, &head_scrut, bindings));
+
+                match &**tail {
+                    Pattern::Capture(name) => {
+                        // Bind the tail to the rest of the array
+                        bindings.push((name.to_string(), format!("{}.slice(1)", scrutinee)));
+                    }
+                    other => {
+                        // Emit the pattern check for the tail
+                        let tail_scrut = format!("{}.slice(1)", scrutinee);
+                        checks.push(self.emit_pattern_check(&other, &tail_scrut, bindings));
+                    }
+                }
+
+                checks.join(" && ")
+            }
+
+            // Wildcard pattern matches anything
+            Pattern::Wildcard => "true".to_string(),
         }
     }
 
@@ -184,7 +262,7 @@ impl JSCodegen {
             "console.log" => {
                 let args_str = args
                     .iter()
-                    .map(|arg| self.visit_expr(&arg.target))
+                    .map(|arg| self.emit_expr(&arg.target))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("console.log({})", args_str)
@@ -192,7 +270,7 @@ impl JSCodegen {
             extern_name if extern_name.starts_with("Math.") => {
                 let args_str = args
                     .iter()
-                    .map(|arg| self.visit_expr(&arg.target))
+                    .map(|arg| self.emit_expr(&arg.target))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{}({})", extern_name, args_str)
@@ -201,7 +279,7 @@ impl JSCodegen {
                 // Fallback to regular function call
                 let args_str = args
                     .iter()
-                    .map(|arg| self.visit_expr(&arg.target))
+                    .map(|arg| self.emit_expr(&arg.target))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{}({})", extern_name, args_str)
@@ -229,12 +307,12 @@ impl JSCodegen {
         }
 
         // First argument is the receiver (the object to call the method on)
-        let receiver = self.visit_expr(&args[0].target);
+        let receiver = self.emit_expr(&args[0].target);
 
         // Remaining arguments are the method arguments
         let method_args: Vec<String> = args[1..]
             .iter()
-            .map(|arg| self.visit_expr(&arg.target))
+            .map(|arg| self.emit_expr(&arg.target))
             .collect();
 
         if method_args.is_empty() {
@@ -254,7 +332,7 @@ impl JSCodegen {
         }
     }
 
-    fn visit_function_call(&mut self, target: &Expr, args: Vec<Span<Expr>>) -> String {
+    fn emit_function_call(&mut self, target: &Expr, args: Vec<Span<Expr>>) -> String {
         if let Expr::Ident(name) = target {
             // Check if the function is an extern function
             if let Some(func) = self.lookup_function(name) {
@@ -266,24 +344,20 @@ impl JSCodegen {
             }
 
             // Regular function call
-            let args_emit: Vec<String> = args
-                .iter()
-                .map(|arg| self.visit_expr(&arg.target))
-                .collect();
+            let args_emit: Vec<String> =
+                args.iter().map(|arg| self.emit_expr(&arg.target)).collect();
             return format!("{}({})", name, args_emit.join(", "));
         } else {
             // If the target is not an identifier, visit it as an expression
-            let target_js = self.visit_expr(target);
-            let args_emit: Vec<String> = args
-                .iter()
-                .map(|arg| self.visit_expr(&arg.target))
-                .collect();
+            let target_js = self.emit_expr(target);
+            let args_emit: Vec<String> =
+                args.iter().map(|arg| self.emit_expr(&arg.target)).collect();
             format!("{}({})", target_js, args_emit.join(", "))
         }
     }
 
-    fn visit_unary_op(&mut self, op: &Op, expr: &Expr) -> String {
-        let expr_js = self.visit_expr(expr);
+    fn emit_unary_op(&mut self, op: &Op, expr: &Expr) -> String {
+        let expr_js = self.emit_expr(expr);
         match op {
             Op::Neg => format!("-{}", expr_js),
             Op::Not => format!("!{}", expr_js),
@@ -292,8 +366,11 @@ impl JSCodegen {
     }
 }
 
+/// Implement the Emit trait for JSCodegen
+///
+/// Codegen backends should implement this trait to provide visitors
 impl Emit for JSCodegen {
-    fn visit_expr(&mut self, expr: &Expr) -> String {
+    fn emit_expr(&mut self, expr: &Expr) -> String {
         match &expr {
             Expr::Literal(lit) => match lit {
                 Literal::Int(i) => format!("{}|0", i.to_string()),
@@ -312,30 +389,30 @@ impl Emit for JSCodegen {
             }
             Expr::MemberAccess(member) => {
                 // TODO: Will this handle nested member accesses?
-                let emit = self.visit_expr(&member.target.target);
+                let emit = self.emit_expr(&member.target.target);
                 format!("{}.{}", emit, member.name)
             }
-            Expr::BinOp(left, op, right) => self.visit_bin_op(&left.target, op, &right.target),
-            Expr::UnOp(op, expr) => self.visit_unary_op(op, &expr.target),
+            Expr::BinOp(left, op, right) => self.emit_bin_op(&left.target, op, &right.target),
+            Expr::UnOp(op, expr) => self.emit_unary_op(op, &expr.target),
 
             Expr::Record(record) => {
                 let fields: Vec<String> = record
                     .fields
                     .iter()
-                    .map(|(name, expr)| format!("{}: {}", name, self.visit_expr(&expr)))
+                    .map(|(name, expr)| format!("{}: {}", name, self.emit_expr(&expr)))
                     .collect();
                 format!("/*{}*/ {{ {} }}", record.name, fields.join(", "))
             }
             Expr::Array { elements } => {
                 let emit: Vec<String> = elements
                     .iter()
-                    .map(|elem| self.visit_expr(&elem.target))
+                    .map(|elem| self.emit_expr(&elem.target))
                     .collect();
                 format!("[{}]", emit.join(", "))
             }
             Expr::ArrayIndex { target, index } => {
-                let target_emit = self.visit_expr(&target.target);
-                let index_emit = self.visit_expr(&index.target);
+                let target_emit = self.emit_expr(&target.target);
+                let index_emit = self.emit_expr(&index.target);
                 format!("{}[{}]", target_emit, index_emit)
             }
             Expr::FnCall { target, args } => {
@@ -343,7 +420,7 @@ impl Emit for JSCodegen {
                     "DEBUG: Codegen: Visit Function call: {}",
                     target.target.pretty()
                 );
-                self.visit_function_call(&target.target, args.to_vec())
+                self.emit_function_call(&target.target, args.to_vec())
             }
             Expr::Lam {
                 args,
@@ -352,7 +429,7 @@ impl Emit for JSCodegen {
             } => {
                 // Discard any type information for JS
                 let args_emit: Vec<String> = args.iter().map(|(name, _)| name.clone()).collect();
-                let body_emit = self.visit_expr(&body.target);
+                let body_emit = self.emit_expr(&body.target);
 
                 self.pp.print(&format!(
                     "function({}) {{ return {}; }}",
@@ -361,7 +438,7 @@ impl Emit for JSCodegen {
                 ))
             }
             Expr::If { cond, then, else_ } => {
-                let cond_emit = self.visit_expr(&cond.target);
+                let cond_emit = self.emit_expr(&cond.target);
 
                 // Check if we can desugar to ternary: both branches must have exactly one Stmt::Expr
                 let can_desugar = then.len() == 1
@@ -382,19 +459,48 @@ impl Emit for JSCodegen {
                     let mut code = String::new();
                     code.push_str(&format!("if ({}) {{\n", cond_emit));
                     self.pp.indent();
-                    code.push_str(&self.visit_block(then.clone()));
+                    code.push_str(&self.emit_block(then.clone()));
                     self.pp.dedent();
                     code.push_str(&self.pp.print("}\n"));
 
                     if let Some(else_branch) = else_ {
                         code.push_str(&self.pp.print("else {\n"));
                         self.pp.indent();
-                        code.push_str(&self.visit_block(else_branch.clone()));
+                        code.push_str(&self.emit_block(else_branch.clone()));
                         self.pp.dedent();
                         code.push_str(&self.pp.print("}\n"));
                     }
                     code
                 }
+            }
+            Expr::Match(pmatch) => {
+                // Desugar pattern match into a series of if-else statements
+                let scrutinee_js = self.emit_expr(&pmatch.target.target);
+                let match_id = self.unique_match_id();
+
+                let mut branches = String::new();
+                for branch in &pmatch.branches {
+                    let mut bindings = Vec::new();
+                    let check = self.emit_pattern_check(&branch.pattern, &match_id, &mut bindings);
+
+                    let mut binding_decls = String::new();
+                    for (name, value) in bindings {
+                        binding_decls.push_str(&format!("const {} = {};\n", name, value));
+                    }
+
+                    let branch_body = self.emit_expr(&branch.expr.target);
+                    branches.push_str(&format!(
+                        "if ({}) {{{}; return {};}} else ",
+                        check, binding_decls, branch_body
+                    ));
+                }
+
+                // TODO: Handle this at the typechecker level later
+                branches.push_str("{ throw new Error('Non-exhaustive pattern match'); }");
+                format!(
+                    "(() => {{ const {} = {}; {} }})()",
+                    match_id, scrutinee_js, branches
+                )
             }
 
             // Unimplemented expressions
@@ -402,11 +508,11 @@ impl Emit for JSCodegen {
         }
     }
 
-    fn visit_toplevel(&mut self, toplevel: &ToplevelStmt) -> String {
+    fn emit_toplevel(&mut self, toplevel: &ToplevelStmt) -> String {
         match &toplevel {
             ToplevelStmt::Stmt(stmt) => {
                 // Visit the statement and return its JS representation
-                self.visit_stmt(&stmt.target)
+                self.emit_stmt(&stmt.target)
             }
 
             ToplevelStmt::RecordDecl(record) => {
@@ -522,7 +628,8 @@ impl Emit for JSCodegen {
             }
 
             ToplevelStmt::FnDecl(func) => {
-                // Discard any type information for JS
+                // Discard any type information for JS, we have checked beforehand so this is fine
+
                 let func_args: Vec<String> =
                     func.args.iter().map(|(name, _ty)| name.clone()).collect();
 
@@ -532,8 +639,8 @@ impl Emit for JSCodegen {
 
                 let mut bindings_code = String::new();
 
+                // Handle where bindings, if any
                 if !func.where_bindings.is_empty() {
-                    // Handle where bindings
                     let where_bindings = func
                         .where_bindings
                         .iter()
@@ -541,7 +648,7 @@ impl Emit for JSCodegen {
                             format!(
                                 "{}: {}",
                                 binding.name,
-                                self.visit_expr(&binding.value.target)
+                                self.emit_expr(&binding.value.target)
                             )
                         })
                         .collect::<Vec<_>>()
@@ -549,26 +656,26 @@ impl Emit for JSCodegen {
 
                     // Freeze the object (closest to true immutability in JS)
                     bindings_code =
-                        format!("const freeze = Object.freeze({{ {} }})", where_bindings);
+                        format!("const _bind = Object.freeze({{ {} }})", where_bindings);
                 }
 
                 let body_emit = if func.body.is_none() {
                     // Single expression function
                     if func.body_expr.is_some() {
-                        self.relative_to_binding = Some("freeze".to_string());
+                        self.relative_to_binding = Some("_bind".to_string());
                         self.relative_bindings = func
                             .where_bindings
                             .iter()
                             .map(|binding| binding.name.clone())
                             .collect();
 
-                        let body_expr = self.visit_expr(&func.body_expr.as_ref().unwrap().target);
+                        let body_expr = self.emit_expr(&func.body_expr.as_ref().unwrap().target);
 
                         // If we have any bindings, prepend them
                         let to_return = if func.where_bindings.is_empty() {
                             // No where bindings, just return the expression
                             format!(
-                                "function {}({}) {{ return {}; }}",
+                                "const {} = ({}) => {{ return {}; }}",
                                 func.name,
                                 func_args.join(", "),
                                 body_expr
@@ -576,7 +683,7 @@ impl Emit for JSCodegen {
                         } else {
                             // With where bindings, we need to include them
                             format!(
-                                "function {}({}) {{ {}; return {}; }}",
+                                "const {} = ({}) => {{ \n{}; return {}; }}",
                                 func.name,
                                 func_args.join(", "),
                                 bindings_code,
@@ -584,7 +691,6 @@ impl Emit for JSCodegen {
                             )
                         };
 
-                        // Reset relative binding after use
                         self.relative_to_binding = None;
                         self.relative_bindings.clear();
 
@@ -594,10 +700,8 @@ impl Emit for JSCodegen {
                         format!("function {}({}) {{}}", func.name, func_args.join(", "))
                     }
                 } else {
-                    println!("Function with a block body");
-
-                    // Function with a block body
-                    let body = self.visit_block(func.body.as_ref().unwrap().clone());
+                    // Statement block function
+                    let body = self.emit_block(func.body.as_ref().unwrap().clone());
 
                     format!(
                         "function {}({}) {{\n{}\n}}",
@@ -612,22 +716,22 @@ impl Emit for JSCodegen {
         }
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt) -> String {
+    fn emit_stmt(&mut self, stmt: &Stmt) -> String {
         match &stmt {
-            Stmt::Expr(expr) => self.visit_expr(&expr.target),
+            Stmt::Expr(expr) => self.emit_expr(&expr.target),
             Stmt::Let { name, ty: _, value } => {
-                let value_emit = self.visit_expr(&value.target);
+                let value_emit = self.emit_expr(&value.target);
                 format!("const {} = {};", name, value_emit)
             }
 
             Stmt::Mut { name, ty: _, value } => {
-                let value_emit = self.visit_expr(&value.target);
+                let value_emit = self.emit_expr(&value.target);
                 format!("let /*mut*/ {} = {};", name, value_emit)
             }
 
             Stmt::Assign { target, value } => {
-                let target_emit = self.visit_expr(&target.target);
-                let value_emit = self.visit_expr(&value.target);
+                let target_emit = self.emit_expr(&target.target);
+                let value_emit = self.emit_expr(&value.target);
                 format!("{} = {};", target_emit, value_emit)
             }
 
@@ -636,25 +740,31 @@ impl Emit for JSCodegen {
                 iterable,
                 body,
             } => {
-                let target_emit = self.visit_expr(&target.target);
-                let iterable_emit = self.visit_expr(&iterable.target);
-                let body_emit = self.visit_block(body.clone());
+                let target_emit = self.emit_expr(&target.target);
+                let iterable_emit = self.emit_expr(&iterable.target);
+                let body_emit = self.emit_block(body.clone());
 
                 format!(
                     "for (const {} of {}) {{\n{}\n}}",
-                    target_emit, iterable_emit, body_emit
+                    target_emit,
+                    iterable_emit,
+                    self.pp.print(&body_emit)
                 )
             }
 
             Stmt::While { cond, body } => {
-                let cond_emit = self.visit_expr(&cond.target);
-                let body_emit = self.visit_block(body.clone());
-                format!("while ({}) {{\n{}\n}}", cond_emit, body_emit)
+                let cond_emit = self.emit_expr(&cond.target);
+                let body_emit = self.emit_block(body.clone());
+                format!(
+                    "while ({}) {{\n{}\n}}",
+                    cond_emit,
+                    self.pp.print(&body_emit)
+                )
             }
         }
     }
 
-    fn visit_block(&mut self, block: Vec<Span<Stmt>>) -> String {
+    fn emit_block(&mut self, block: Vec<Span<Stmt>>) -> String {
         let mut block_code = String::new();
 
         self.pp.indent();
@@ -663,11 +773,11 @@ impl Emit for JSCodegen {
             match &stmt.target {
                 Stmt::Expr(expr) if i == len - 1 => {
                     // Last statement and it's an expression: emit as return
-                    let expr_js = self.visit_expr(&expr.target);
+                    let expr_js = self.emit_expr(&expr.target);
                     block_code.push_str(&self.pp.print(&format!("return {};", expr_js)));
                 }
                 _ => {
-                    let stmt_js = self.visit_stmt(&stmt.target);
+                    let stmt_js = self.emit_stmt(&stmt.target);
                     block_code.push_str(&self.pp.print(&stmt_js));
                 }
             }
@@ -682,7 +792,7 @@ impl Emit for JSCodegen {
         self.ast = ast;
 
         for toplevel in self.ast.clone() {
-            let stmt_js = self.visit_toplevel(&toplevel.target);
+            let stmt_js = self.emit_toplevel(&toplevel.target);
             self.js_code.push_str(&self.pp.print(&stmt_js));
             self.js_code.push('\n');
         }

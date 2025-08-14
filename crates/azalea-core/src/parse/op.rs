@@ -16,6 +16,7 @@ impl TokenKind {
             TokenKind::Greater => Op::Greater,
             TokenKind::GreaterEq => Op::GreaterEq,
             TokenKind::Dollar => Op::Dollar,
+            TokenKind::Underscore => Op::Wildcard,
             _ => panic!("TokenKind::to_operator called on non-operator token"),
         }
     }
