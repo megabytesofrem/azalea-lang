@@ -3,7 +3,7 @@
 use super::Parser;
 use crate::ast::Stmt;
 use crate::ast::ast_types::{Function, Ty};
-use crate::lexer::{SourceLoc, TokenKind};
+use crate::lexer::TokenKind;
 use crate::parse::base as parser;
 use crate::parse::span::{Span, spanned};
 
@@ -11,7 +11,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_signature(&mut self) -> parser::Return<Span<Function>> {
         // fn name(args: ty, ...): ty
 
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
         let name = self.expect(TokenKind::Name)?.literal;
 
         self.expect(TokenKind::LParen)?;
@@ -60,7 +60,7 @@ impl<'a> Parser<'a> {
         //   fn equals(self: A, other: A): Bool
         // end
 
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
         self.expect(TokenKind::KwClass)?;
         let name = self.expect(TokenKind::Name)?.literal;
 
@@ -87,7 +87,7 @@ impl<'a> Parser<'a> {
         //   fn equals(self: Int, other: Int): Bool
         // end
 
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
         self.expect(TokenKind::KwImpl)?;
 
         let class_name = self.expect(TokenKind::Name)?.literal;

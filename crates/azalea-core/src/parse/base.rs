@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::error::ParserError;
 use crate::ast::{ParseRoot, Stmt, ToplevelStmt};
-use crate::lexer::{self, LexerIter, Op, Token, TokenKind};
+use crate::lexer::{self, LexerIter, Op, SourceLoc, Token, TokenKind};
 use crate::parse::{base, span::Span};
 
 /// Associativity
@@ -66,6 +66,12 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Helper function to get the current token location
+    pub fn get_token_location(&mut self) -> SourceLoc {
+        let location = self.peek().map(|t| t.location.clone()).unwrap_or_default();
+        location
+    }
+
     // Parser driver function
     pub fn parse(token_stream: lexer::LexerIter<'a>) -> base::Return<'a, Parser<'a>> {
         let mut parser = Parser::new(token_stream);
@@ -91,8 +97,6 @@ impl<'a> Parser<'a> {
 
     /// Parse a top-level statement (record, enum, or regular statement)
     pub(crate) fn parse_toplevel_stmt(&mut self) -> Return<Span<ToplevelStmt>> {
-        // let start_location = self.peek().map(|t| t.location).unwrap_or_default();
-
         // Skip any comments
         self.skip_comments();
 
@@ -131,6 +135,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn setup_precedence_table(&mut self) {
+        self.precedence_table.insert(Op::Dollar, (0, Assoc::Right));
         self.precedence_table.insert(Op::Add, (10, Assoc::Left));
         self.precedence_table.insert(Op::Sub, (10, Assoc::Left));
         self.precedence_table.insert(Op::Mul, (20, Assoc::Left));

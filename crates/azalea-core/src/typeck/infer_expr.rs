@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::ast_types::{EnumVariantPayload, Function, Record, RecordExpr, Ty};
 use crate::ast::pretty::Pretty;
 use crate::ast::{Expr, Literal};
-use crate::lexer::SourceLoc;
+use crate::lexer::{Op, SourceLoc};
 
 use crate::parse::type_;
 // Name and scope resolution
@@ -61,6 +61,17 @@ impl Typechecker {
                     .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))?;
 
                 Ok(self.instantiate(&ty))
+            }
+
+            Expr::BinOp(lhs, Op::Dollar, rhs) => {
+                // Special case for the application operator `$`
+                // Desugar f $ g $ h(i) to f(g(h(i)))
+                let fn_call = Expr::FnCall {
+                    target: lhs.clone(),
+                    args: vec![*rhs.clone()],
+                };
+
+                self.infer_type(env, &fn_call, location.clone())
             }
 
             Expr::BinOp(lhs, op, rhs) => {

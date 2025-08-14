@@ -192,6 +192,8 @@ pub enum TokenKind {
     Arrow,
     #[token("|")]
     Pipe,
+    #[token("$")]
+    Dollar,
 
     // Keywords
     #[token("pub")]
@@ -286,6 +288,7 @@ pub enum Op {
 
     Neg,
     Not,
+    Dollar,
 }
 
 // Wrapper type for a peekable iterator over lexing results

@@ -25,6 +25,7 @@ fn op_to_string(op: &Op) -> String {
         Op::LessEq => "<=",
         Op::GreaterEq => ">=",
         Op::Neg => "-",
+        Op::Dollar => "$",
     }
     .into()
 }

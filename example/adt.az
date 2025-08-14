@@ -18,3 +18,7 @@ fn print_gender(g: Gender) =
     "Other gender"
 
 -- TODO: Add pattern matching syntax
+
+extern fn "console.log" writeln(s: String): Unit
+
+writeln $ print_gender(Gender.Male)

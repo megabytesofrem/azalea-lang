@@ -25,7 +25,7 @@ impl<'a> Parser<'a> {
             self.next(); // consume the comment token
         }
 
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         match self.peek().map(|t| t.kind) {
             Some(TokenKind::KwLet) => self.parse_let(),
@@ -115,7 +115,7 @@ impl<'a> Parser<'a> {
 
     fn parse_let(&mut self) -> parser::Return<Span<Stmt>> {
         // let name: ty = expr or let name = expr
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwLet)?;
         let name = self.expect(TokenKind::Name)?.literal;
@@ -148,7 +148,7 @@ impl<'a> Parser<'a> {
 
     fn parse_mut(&mut self) -> Result<Span<Stmt>, ParserError> {
         // mut name: ty = expr or mut name = expr
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwMut)?;
         let name = self.expect(TokenKind::Name)?.literal;
@@ -183,7 +183,7 @@ impl<'a> Parser<'a> {
         // for name in expr do
         //   ...
         // end
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwFor)?;
         let target = self.parse_expr()?;
@@ -209,7 +209,7 @@ impl<'a> Parser<'a> {
         // while expr do
         //   ...
         // end
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwWhile)?;
 
@@ -294,7 +294,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_record_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // record name = { field: ty, ... }
         // record name[A] = { field: ty, ... }
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwRecord)?;
         let name = self.expect(TokenKind::Name)?.literal;
@@ -356,7 +356,7 @@ impl<'a> Parser<'a> {
 
         self.skip_comments();
 
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwEnum)?;
         let name = self.expect(TokenKind::Name)?.literal;
@@ -409,7 +409,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_fn_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // fn name(args: ty, ...) -> ty =
         // With generics: fn name[T, U](args: ty, ...) -> ty =
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwFn)?;
         let name = self.expect(TokenKind::Name)?.literal;
@@ -483,7 +483,7 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_extern_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
         // extern fn "js_name" name(args: ty, ...) : ty
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwExtern)?;
         self.expect(TokenKind::KwFn)?;

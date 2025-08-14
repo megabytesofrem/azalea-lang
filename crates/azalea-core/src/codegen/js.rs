@@ -105,6 +105,12 @@ impl JSCodegen {
 
     fn is_enum_variant(&self, member: &Member) -> bool {
         // Split the member name into the enum name and variant name
+
+        // Check if this is a member of an enum variant
+        if !member.name.contains('.') {
+            return false;
+        }
+
         let member_name = member.name.split(".").collect::<Vec<_>>()[0];
         let enum_variant = member.name.split(".").collect::<Vec<_>>()[1];
 
@@ -150,6 +156,13 @@ impl JSCodegen {
             Op::GreaterEq => format!("{} >= {}", left_js, right_js),
             Op::Neg => format!("-{}", right_js), // Unary negation
             Op::Not => format!("!{}", right_js), // Unary not
+
+            Op::Dollar => {
+                // Special case for curried function calls using dollar
+                let target = self.visit_expr(left);
+                let arg = self.visit_expr(right);
+                format!("{}({})", target, arg)
+            }
             _ => panic!("Unsupported binary operator: {:?}", op),
         }
     }

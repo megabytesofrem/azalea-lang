@@ -1,4 +1,4 @@
-//! Tiny, miscellaneous parsers that don't fit into any other category.
+//! Operator conversions
 
 use crate::lexer::{Op, TokenKind};
 
@@ -15,6 +15,7 @@ impl TokenKind {
             TokenKind::LessEq => Op::LessEq,
             TokenKind::Greater => Op::Greater,
             TokenKind::GreaterEq => Op::GreaterEq,
+            TokenKind::Dollar => Op::Dollar,
             _ => panic!("TokenKind::to_operator called on non-operator token"),
         }
     }
@@ -32,6 +33,7 @@ impl TokenKind {
                 | TokenKind::LessEq
                 | TokenKind::Greater
                 | TokenKind::GreaterEq
+                | TokenKind::Dollar
         )
     }
 

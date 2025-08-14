@@ -14,7 +14,7 @@ impl<'a> Parser<'a> {
     // parse_expr_prec and parse_expr are helper functions for parsing expressions with precedence, while
     // parse_main_expr is for parsing the actual expressions themselves
     pub(crate) fn parse_expr_prec(&mut self, min_prec: u8) -> parser::Return<Span<Expr>> {
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
         let mut lhs = self.parse_main_expr()?;
 
         while let Some(op_token) = self.peek().clone() {
@@ -48,7 +48,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_main_expr(&mut self) -> parser::Return<Span<Expr>> {
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         // Check for unary operators first
         if let Some(token) = self.peek() {
@@ -279,7 +279,7 @@ impl<'a> Parser<'a> {
 
     fn parse_lambda(&mut self) -> parser::Return<Span<Expr>> {
         // \(x) -> body or \(x,y) -> body
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
         self.expect(TokenKind::Lambda)?;
         self.expect(TokenKind::LParen)?;
 
@@ -312,7 +312,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_if(&mut self) -> parser::Return<Span<Expr>> {
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::KwIf)?;
         let cond = self.parse_expr()?;
@@ -430,7 +430,7 @@ impl<'a> Parser<'a> {
     /// Parse an array literal
     fn parse_array(&mut self) -> parser::Return<Span<Expr>> {
         // [1, 2, 3]
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         self.expect(TokenKind::LSquare)?;
         let mut elements = Vec::new();
@@ -453,7 +453,7 @@ impl<'a> Parser<'a> {
     /// Parse a record expression
     fn parse_record_expr(&mut self) -> parser::Return<Span<Expr>> {
         // .{ field1: 1, field2: 2 } or Named { field1: 1, field2: 2 }
-        let location = self.peek().map(|t| t.location).unwrap_or_default();
+        let location = self.get_token_location();
 
         let name = match self.peek().map(|t| t.kind) {
             Some(TokenKind::Name) => {
