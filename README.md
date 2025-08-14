@@ -5,7 +5,7 @@ Small language inspired by Haskell and Lua, that compiles to JS.
 ## Status
 
 Azalea is currently heavily **work in progress** and not yet ready for end-user usage.
-The core features such as its type checker and resolver are working, but still incomplete.
+It currently features a mostly working but still temperamental type checker and experimental codegen.
 
 ## Rationale
 
@@ -39,16 +39,16 @@ mut count = 0
 `fn` is also used as a type for higher-order functions i.e `fn(int -> int)`.
 
 ```lua
-fn greet(name: string) = "Hello " ++ name
+fn greet(name: String) = "Hello " + name
 fn blocky() = do
   ..
 end
 
-fn adder(g: int, h: int) = g + h
-fn apply_adder(f: fn(int -> int), g: int, h: int) = f(g,h)
+fn adder(g: Int, h: Int) = g + h
+fn apply_adder(f: fn(Int) -> Int, g: Int, h: Int) = f(g,h)
 
 -- Lambda functions
-let add_lam = (x, y) -> x + y
+let add_lam = \(x, y) -> x + y
 apply_adder(adder, 1, 2) -- => 3
 apply_adder(add_lam, 1, 2) -- => 3
 ```
@@ -59,17 +59,17 @@ apply_adder(add_lam, 1, 2) -- => 3
 
 ```cs
 record Counter = {
-  count: int
+  count: Int
 }
 
-enum Colours = {
-  red,
-  green,
-  blue
-}
+enum Colors =
+    Red
+  | Green
+  | Blue
+  | Hex(String)
 
 fn increment(c: Counter) = c.count += 1
-let primary_colour = Colours.red
+let primary_colour = Colors.Red
 ```
 
 ### Typeclasses
