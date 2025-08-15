@@ -214,8 +214,8 @@ pub enum TokenKind {
     KwLet,
     #[token("fn")]
     KwFn,
-    #[token("record")]
-    KwRecord,
+    #[token("data")]
+    KwData,
     #[token("enum")]
     KwEnum,
     #[token("import")]

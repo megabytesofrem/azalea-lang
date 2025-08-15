@@ -97,9 +97,23 @@ impl<'a> Parser<'a> {
             }
 
             TokenKind::Name => {
-                let ident = spanned(Expr::Ident(token.literal.to_string()), location.clone());
-                self.next();
-                self.parse_postfix(ident)
+                // Look ahead to see if this is record construction: Name { ... }
+                let lookahead_record_ctor = {
+                    let mut temp_parser = self.clone();
+                    temp_parser.next(); // consume name
+                    temp_parser.peek().map(|t| t.kind) == Some(TokenKind::LBrace)
+                };
+
+                if lookahead_record_ctor {
+                    let record_expr = self.parse_record_expr()?;
+                    self.parse_postfix(record_expr)
+                } else {
+                    // This is just an identifier, parse any postfix operations
+                    let name = token.literal.to_string();
+                    self.next(); // consume the name token
+                    let ident = spanned(Expr::Ident(name), location.clone());
+                    self.parse_postfix(ident)
+                }
             }
 
             TokenKind::KwIf => {
@@ -190,59 +204,9 @@ impl<'a> Parser<'a> {
                 }
 
                 TokenKind::LBrace => {
-                    // Record construction: Name { field: value, ... }
-                    // Convert the base expression (which should be an identifier) to a record expression
-                    if let Expr::Ident(name) = &base_expr.target {
-                        println!("Parsing named record construction for: {}", name);
-
-                        // Parse the record fields
-                        let location = base_expr.loc.clone();
-                        self.expect(TokenKind::LBrace)?;
-
-                        let mut fields = Vec::new();
-                        while self.peek().map(|t| t.kind) != Some(TokenKind::RBrace) {
-                            // Parse field: expression pair
-                            let field_name = match self.peek() {
-                                Some(Token {
-                                    kind: TokenKind::Name,
-                                    literal,
-                                    ..
-                                }) => {
-                                    let name = literal.to_string();
-                                    self.next();
-                                    name
-                                }
-                                Some(Token { location, .. }) => {
-                                    return Err(ParserError::InvalidRecordFormat(location));
-                                }
-                                None => return Err(ParserError::UnexpectedEOF),
-                            };
-
-                            self.expect(TokenKind::Colon)?;
-                            let field_expr = self.parse_expr()?;
-                            fields.push((field_name, field_expr.target));
-
-                            if self.peek().map(|t| t.kind) != Some(TokenKind::Comma) {
-                                break;
-                            }
-                            self.next();
-                        }
-
-                        self.expect(TokenKind::RBrace)?;
-
-                        let record_expr = spanned(
-                            Expr::Record(RecordExpr {
-                                name: name.clone(),
-                                fields,
-                            }),
-                            location,
-                        );
-
-                        self.parse_postfix(record_expr)
-                    } else {
-                        // Base expression is not an identifier, can't do record construction
-                        Ok(base_expr)
-                    }
+                    // LBrace in postfix position doesn't make sense for record construction
+                    // Record construction should be handled in parse_main_expr
+                    Ok(base_expr)
                 }
 
                 TokenKind::LSquare => {
@@ -484,9 +448,19 @@ impl<'a> Parser<'a> {
         // Unconditionally expect a left brace
         self.expect(TokenKind::LBrace)?;
 
+        let fields = self.parse_record_fields()?;
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(spanned(Expr::Record(RecordExpr { name, fields }), location))
+    }
+
+    /// Parse record fields: field1: value1, field2: value2, ...
+    fn parse_record_fields(&mut self) -> parser::Return<Vec<(String, Expr)>> {
         let mut fields = Vec::new();
+
         while self.peek().map(|t| t.kind) != Some(TokenKind::RBrace) {
-            // Parse field: expression pair for record value expressions
+            // Parse field: expression pair
             let field_name = match self.peek() {
                 Some(Token {
                     kind: TokenKind::Name,
@@ -497,7 +471,9 @@ impl<'a> Parser<'a> {
                     self.next();
                     name
                 }
-                Some(Token { location, .. }) => return Err(ParserError::ExpectedExpr(location)),
+                Some(Token { location, .. }) => {
+                    return Err(ParserError::InvalidRecordFormat(location));
+                }
                 None => return Err(ParserError::UnexpectedEOF),
             };
 
@@ -511,8 +487,6 @@ impl<'a> Parser<'a> {
             self.next();
         }
 
-        self.expect(TokenKind::RBrace)?;
-
-        Ok(spanned(Expr::Record(RecordExpr { name, fields }), location))
+        Ok(fields)
     }
 }

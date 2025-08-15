@@ -284,14 +284,20 @@ impl Typechecker {
             ToplevelStmt::Stmt(stmt) => self.check(env, stmt, location),
 
             ToplevelStmt::RecordDecl(record) => {
-                let ty = record.to_type(&mut self.clone());
-                let local_subst = self.unify(
-                    &ty,
-                    &record.to_type(&mut self.clone()),
-                    toplevel.loc.clone(),
-                )?;
-                env.extend(local_subst);
                 self.global_env.define_record(record.clone());
+
+                let ty = if record.type_params.is_empty() {
+                    Ty::TypeCons(record.name.clone(), vec![])
+                } else {
+                    let type_params = record
+                        .type_params
+                        .iter()
+                        .map(|p| Ty::Var(p.clone()))
+                        .collect();
+
+                    Ty::TypeCons(record.name.clone(), type_params)
+                };
+
                 env.insert(record.name.clone(), ty);
                 Ok(())
             }
@@ -512,7 +518,7 @@ impl Typechecker {
                 Ok(())
             }
 
-            Stmt::Let { name, ty, value } => {
+            Stmt::Let { name, ty, value } | Stmt::Mut { name, ty, value } => {
                 let value_ty = match &value.target {
                     Expr::Record(record) => {
                         self.check_record_against_expected_type(record, &ty, env, location)?
@@ -520,10 +526,10 @@ impl Typechecker {
                     Expr::Lam { .. } => {
                         // If type annotation is provided, use it as expected type
                         if *ty != Ty::Unresolved {
-                            self.infer_lam_with_type(&value.target, env, location, Some(&ty))?
+                            self.infer_lam_with_type(env, &value.target, Some(&ty), location)?
                         } else {
                             // No type annotation: infer most general type
-                            self.infer_lam_with_type(&value.target, env, location, None)?
+                            self.infer_lam_with_type(env, &value.target, None, location)?
                         }
                     }
                     _ => self.infer_type(env, &value.target, value.loc.clone())?,
@@ -544,18 +550,6 @@ impl Typechecker {
                     .define_or_redefine_variable(name.clone(), generalized_ty.clone());
                 env.insert(name.clone(), generalized_ty);
 
-                Ok(())
-            }
-
-            Stmt::Mut { name, ty, value } => {
-                let value_ty = self.infer_type(env, &value.target, value.loc.clone())?;
-                let local_subst = self.unify(&ty, &value_ty, value.loc.clone())?;
-                env.extend(local_subst);
-
-                // Add the variable to both the resolver (for scope management) and typing environment (for type tracking)
-                self.resolver
-                    .define_or_redefine_variable(name.clone(), ty.clone());
-                env.insert(name.clone(), ty.clone());
                 Ok(())
             }
 

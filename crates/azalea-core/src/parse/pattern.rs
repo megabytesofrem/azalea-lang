@@ -63,9 +63,33 @@ impl<'a> Parser<'a> {
             }
 
             Some(TokenKind::Name) => {
-                // Parse a pattern that captures a single variable
-                let token = self.next().unwrap();
-                Ok(Pattern::Capture(token.literal.to_string()))
+                // Could be either a capture pattern or an enum variant pattern
+                let first_token = self.next().unwrap();
+
+                // Check if this is followed by a dot (enum variant)
+                if self.peek().map(|t| t.kind) == Some(TokenKind::Dot) {
+                    self.next(); // consume the dot
+                    let variant_name = self.expect(TokenKind::Name)?.literal.to_string();
+
+                    // Check if there's a payload in parentheses
+                    let payload = if self.peek().map(|t| t.kind) == Some(TokenKind::LParen) {
+                        self.next(); // consume '('
+                        let pattern = self.parse_pattern()?;
+                        self.expect(TokenKind::RParen)?;
+                        Some(Box::new(pattern))
+                    } else {
+                        None
+                    };
+
+                    Ok(Pattern::EnumVariant {
+                        enum_name: first_token.literal.to_string(),
+                        variant_name,
+                        payload,
+                    })
+                } else {
+                    // Just a capture pattern
+                    Ok(Pattern::Capture(first_token.literal.to_string()))
+                }
             }
 
             Some(TokenKind::LSquare) => {

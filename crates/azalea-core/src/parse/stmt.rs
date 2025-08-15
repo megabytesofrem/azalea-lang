@@ -293,11 +293,11 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_record_decl(&mut self) -> parser::Return<Span<ToplevelStmt>> {
-        // record name = { field: ty, ... }
-        // record name[A] = { field: ty, ... }
+        // data name = { field: ty, ... }
+        // data name[A] = { field: ty, ... }
         let location = self.get_token_location();
 
-        self.expect(TokenKind::KwRecord)?;
+        self.expect(TokenKind::KwData)?;
         let name = self.expect(TokenKind::Name)?.literal;
 
         // Parse type parameters if there are any
@@ -552,7 +552,9 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwExtern)?;
         self.expect(TokenKind::KwFn)?;
 
-        let extern_name = self.expect(TokenKind::StringLit)?.literal;
+        let extern_name_raw = self.expect(TokenKind::StringLit)?.literal;
+        // Strip quotes from the extern name (e.g., "console.log" -> console.log)
+        let extern_name = extern_name_raw.trim_matches('"');
 
         let name = self.expect(TokenKind::Name)?.literal;
 

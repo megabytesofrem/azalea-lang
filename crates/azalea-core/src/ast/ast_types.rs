@@ -96,6 +96,13 @@ pub enum Pattern {
 
     // A wildcard pattern that matches anything
     Wildcard,
+
+    // Enum variant pattern, e.g. Gender.Male or Gender.Other(name)
+    EnumVariant {
+        enum_name: String,
+        variant_name: String,
+        payload: Option<Box<Pattern>>,
+    },
 }
 
 /// A pattern match expression

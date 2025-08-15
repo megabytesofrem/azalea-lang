@@ -62,32 +62,6 @@ pub fn desugar_to_ternary(
     )
 }
 
-fn default_js_value(ty: &Ty) -> String {
-    match ty {
-        Ty::Int => "(0)|0".to_string(),
-        Ty::Float => "0.0".to_string(),
-        Ty::String => "\"\"".to_string(),
-        Ty::Bool => "false".to_string(),
-        Ty::Unit => "undefined".to_string(),
-        Ty::Array(inner_ty) => {
-            // Default value for an empty array of the given type
-            format!("[] /* ARRAY[{}] */", inner_ty.pretty())
-        }
-        Ty::TypeCons(name, args) => {
-            // For user-defined types, we can return a default value if one exists
-            // This is a placeholder; in a real implementation, you might want to
-            // generate a constructor call or similar.
-
-            if args.is_empty() {
-                format!("{}", default_js_value(&Ty::Unit))
-            } else {
-                "{}".to_string()
-            }
-        }
-        _ => "undefined".to_string(), // Fallback for unsupported types
-    }
-}
-
 impl JSCodegen {
     pub fn new() -> Self {
         JSCodegen {
@@ -104,7 +78,13 @@ impl JSCodegen {
     }
 
     fn lookup_function(&self, name: &str) -> Option<Function> {
-        self.functions.get(name).cloned()
+        // First check regular functions
+        if let Some(func) = self.functions.get(name).cloned() {
+            return Some(func);
+        }
+
+        // Then check extern functions in global environment
+        self.global_env.lookup_extern_function(name).cloned()
     }
 
     fn lookup_enum(&self, name: &str) -> Option<&Enum> {
@@ -143,23 +123,35 @@ impl JSCodegen {
             Op::Mul => format!("{} * {}", left_js, right_js),
             Op::Div => format!("{} / {}", left_js, right_js),
             Op::DoubleEq => {
-                // Special case for equality check
+                // Special case for equality check with enum variants
                 if self.is_enum_variant(&Member {
                     target: Box::new(spanned(left.clone(), SourceLoc::default())),
                     name: right_js.clone(),
                 }) {
-                    return format!("{}.tag === '{}'", left_js, right_js);
+                    // Extract just the variant name from "EnumName.VariantName"
+                    let variant_name = if let Some(dot_pos) = right_js.rfind('.') {
+                        &right_js[dot_pos + 1..]
+                    } else {
+                        &right_js
+                    };
+                    return format!("{}.tag === '{}'", left_js, variant_name);
                 }
 
                 format!("{} === {}", left_js, right_js)
             }
             Op::NotEq => {
-                // Special case for inequality check
+                // Special case for inequality check with enum variants
                 if self.is_enum_variant(&Member {
                     target: Box::new(spanned(left.clone(), SourceLoc::default())),
                     name: right_js.clone(),
                 }) {
-                    return format!("{}.tag !== '{}'", left_js, right_js);
+                    // Extract just the variant name from "EnumName.VariantName"
+                    let variant_name = if let Some(dot_pos) = right_js.rfind('.') {
+                        &right_js[dot_pos + 1..]
+                    } else {
+                        &right_js
+                    };
+                    return format!("{}.tag !== '{}'", left_js, variant_name);
                 }
 
                 format!("{} !== {}", left_js, right_js)
@@ -248,6 +240,34 @@ impl JSCodegen {
 
             // Wildcard pattern matches anything
             Pattern::Wildcard => "true".to_string(),
+
+            Pattern::EnumVariant {
+                enum_name: _,
+                variant_name,
+                payload,
+            } => {
+                let mut checks = Vec::new();
+
+                // Check that the tag matches the variant name
+                checks.push(format!("{}.tag === '{}'", scrutinee, variant_name));
+
+                // If there's a payload pattern, extract and match it
+                if let Some(payload_pattern) = payload {
+                    match &**payload_pattern {
+                        Pattern::Capture(name) => {
+                            // Extract the first value from the values array
+                            bindings.push((name.clone(), format!("{}.values[0]", scrutinee)));
+                        }
+                        other => {
+                            // For more complex patterns, emit a check on the payload
+                            let payload_scrut = format!("{}.values[0]", scrutinee);
+                            checks.push(self.emit_pattern_check(other, &payload_scrut, bindings));
+                        }
+                    }
+                }
+
+                checks.join(" && ")
+            }
         }
     }
 
@@ -258,6 +278,7 @@ impl JSCodegen {
         }
 
         // Handle other extern patterns
+
         match extern_name {
             "console.log" => {
                 let args_str = args
@@ -267,7 +288,23 @@ impl JSCodegen {
                     .join(", ");
                 format!("console.log({})", args_str)
             }
+            "length" => {
+                if args.len() != 1 {
+                    panic!("length expects exactly one argument");
+                }
+                // Special case for length, emit as property access
+                let target_js = self.emit_expr(&args[0].target);
+                format!("{}.length", target_js)
+            }
             extern_name if extern_name.starts_with("Math.") => {
+                let args_str = args
+                    .iter()
+                    .map(|arg| self.emit_expr(&arg.target))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", extern_name, args_str)
+            }
+            extern_name if extern_name.starts_with("JSON.") => {
                 let args_str = args
                     .iter()
                     .map(|arg| self.emit_expr(&arg.target))
@@ -401,14 +438,43 @@ impl Emit for JSCodegen {
                     .iter()
                     .map(|(name, expr)| format!("{}: {}", name, self.emit_expr(&expr)))
                     .collect();
-                format!("/*{}*/ {{ {} }}", record.name, fields.join(", "))
+
+                if fields.len() <= 2 {
+                    // Keep simple records on one line
+                    format!("{}({{{}}})", record.name, fields.join(", "))
+                } else {
+                    // Multi-line for complex records
+                    let mut result = format!("/*{}*/ {{\n", record.name);
+                    self.pp.indent();
+                    for field in &fields {
+                        result.push_str(&self.pp.print(&format!("{},\n", field)));
+                    }
+                    self.pp.dedent();
+                    result.push_str(&self.pp.print("}"));
+                    result
+                }
             }
             Expr::Array { elements } => {
                 let emit: Vec<String> = elements
                     .iter()
                     .map(|elem| self.emit_expr(&elem.target))
                     .collect();
-                format!("[{}]", emit.join(", "))
+
+                if elements.len() <= 3 {
+                    // Keep simple arrays on one line
+                    format!("[{}]", emit.join(", "))
+                } else {
+                    // Multi-line for complex arrays
+                    let mut result = String::from("[\n");
+                    self.pp.indent();
+                    for (i, elem) in emit.iter().enumerate() {
+                        let separator = if i == emit.len() - 1 { "" } else { "," };
+                        result.push_str(&self.pp.print(&format!("{}{}\n", elem, separator)));
+                    }
+                    self.pp.dedent();
+                    result.push_str(&self.pp.print("]"));
+                    result
+                }
             }
             Expr::ArrayIndex { target, index } => {
                 let target_emit = self.emit_expr(&target.target);
@@ -516,20 +582,30 @@ impl Emit for JSCodegen {
             }
 
             ToplevelStmt::RecordDecl(record) => {
-                // FIXME: This should use the default value of the field type, need to get this
+                // For records, we define a const function that returns an object
+                // This allows us to create unique instances of records and pass them around
 
+                // Create a field binding name:name, discard type information
                 let fields: Vec<String> = record
                     .fields
                     .iter()
-                    .map(|(name, ty)| format!("{}: {}", name, default_js_value(ty)))
+                    .map(|(name, _)| format!("{}: data.{}", name, name))
                     .collect();
 
                 if !self.global_env.is_record_defined(&record.name) {
                     self.global_env.define_record(record.clone());
                 }
 
+                let named_fields = record
+                    .fields
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>();
+
+                // Desugar records into const functions that return objects
+                // so we can pass around unique instances of records
                 format!(
-                    "const /*record*/ {} = {{ {} }};",
+                    "const {} = (data) => ({{ {} }});",
                     record.name,
                     fields.join(", ")
                 )
@@ -578,7 +654,7 @@ impl Emit for JSCodegen {
                             );
                         }
 
-                        EnumVariantPayload::Record(fields) => {
+                        EnumVariantPayload::Record(_) => {
                             constructors.insert(variant.name.clone(), (
                                 format!("{}_{}", enum_decl.name, variant.name),
                                 format!(

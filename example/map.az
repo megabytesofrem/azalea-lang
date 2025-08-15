@@ -1,0 +1,53 @@
+-- This file demonstrates polymorphic mapping of containers and arrays
+
+
+extern fn "console.log" console_log(msg: String): Void
+extern fn "Object.prototype.toString" to_string[A](obj: Object): String
+extern fn "Array.prototype.map" js_arr_map[A,B](arr: Array[A], f: fn(A) -> B): Array[B]
+extern fn "JSON.stringify" json_stringify[A](obj: Object): String
+
+
+data Container[A] = {
+  value: A
+}
+
+
+-- This is bad and should not type check since A could be anything, 
+-- but our function always put a string into the container which breaks type safety.
+-- fn bad[A](x: String): Container[A] = Container {
+--   value: x
+-- }
+
+-- Good version that uses polymorphism correctly.
+fn mk_container[A](x: A): Container[A] = Container {
+  value: x
+}
+
+fn map_container[A, B](c: Container[A], f: fn(A) -> B): Container[B] = 
+  Container {
+    value: f(c.value)
+  }
+
+fn get_value[A](c: Container[A]): A = c.value
+fn map_arr[A,B](xs: Array[A], f: fn(A) -> B): Array[B] = js_arr_map(xs, f)
+
+data Person = {
+  name: String,
+  age: Int
+}
+
+
+console_log(
+  json_stringify(map_container(
+    mk_container(Person { name: "Alice", age: 30 }),
+    \(x) -> "User: " + json_stringify(x)
+  ))
+)
+
+let persons = [
+  Person { name: "Alice", age: 30 },
+  Person { name: "Bob", age: 25 },
+  Person { name: "Charlie", age: 35 }
+]
+
+let names = map_arr(persons, \(p) -> p)

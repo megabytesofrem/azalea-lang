@@ -101,7 +101,7 @@ impl<'a> Parser<'a> {
         self.skip_comments();
 
         match self.peek().map(|t| t.kind) {
-            Some(TokenKind::KwRecord) => Ok(self.parse_record_decl()?),
+            Some(TokenKind::KwData) => Ok(self.parse_record_decl()?),
             Some(TokenKind::KwEnum) => Ok(self.parse_enum_decl()?),
             Some(TokenKind::KwFn) => Ok(self.parse_fn_decl()?),
             Some(TokenKind::KwExtern) => Ok(self.parse_extern_decl()?),
@@ -121,7 +121,7 @@ impl<'a> Parser<'a> {
         // or until we reach EOF
         while let Some(token) = self.peek() {
             match token.kind {
-                TokenKind::KwLet | TokenKind::KwRecord | TokenKind::KwEnum | TokenKind::KwFn => {
+                TokenKind::KwLet | TokenKind::KwData | TokenKind::KwEnum | TokenKind::KwFn => {
                     // Found a likely start of a new statement, stop skipping
                     return true;
                 }

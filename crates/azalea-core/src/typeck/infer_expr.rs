@@ -167,22 +167,41 @@ impl Typechecker {
                         }
 
                         // Instantiate generics if needed
-                        let mut instantiation_env = HashMap::new();
+                        let mut local_env = HashMap::new();
                         for ty_param in &func.type_params {
                             let fresh_var = self.fresh();
-                            instantiation_env.insert(ty_param.clone(), Ty::Var(fresh_var));
+                            local_env.insert(ty_param.clone(), Ty::Var(fresh_var));
                         }
                         let instantiated_arg_types = func
                             .args
                             .iter()
-                            .map(|(_, ty)| self.instantiate_type(ty, &instantiation_env))
+                            .map(|(_, ty)| self.instantiate_type(ty, &local_env))
                             .collect::<Vec<_>>();
                         let instantiated_return_ty =
-                            self.instantiate_type(&func.return_ty, &instantiation_env);
+                            self.instantiate_type(&func.return_ty, &local_env);
 
                         for (arg, expected_ty) in args.iter().zip(instantiated_arg_types.iter()) {
-                            let arg_ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
-                            let subst = self.unify(expected_ty, &arg_ty, arg.loc.clone())?;
+                            let (arg_ty, unify_expected_ty) = match &arg.target {
+                                Expr::Lam { .. } => {
+                                    let subst_expected_ty = self.hydrate_type(expected_ty, env);
+
+                                    let lambda_ty = self.infer_lam_with_type(
+                                        env,
+                                        &arg.target,
+                                        Some(&subst_expected_ty),
+                                        arg.loc.clone(),
+                                    )?;
+
+                                    // Unify against the substituted expected type, not the original
+                                    (lambda_ty, subst_expected_ty)
+                                }
+                                _ => {
+                                    let ty = self.infer_type(env, &arg.target, arg.loc.clone())?;
+                                    (ty, expected_ty.clone())
+                                }
+                            };
+
+                            let subst = self.unify(&unify_expected_ty, &arg_ty, arg.loc.clone())?;
                             env.extend(subst);
                         }
 
@@ -717,6 +736,77 @@ impl Typechecker {
                     }),
                 }
             }
+
+            Pattern::EnumVariant {
+                enum_name,
+                variant_name,
+                payload,
+            } => {
+                // Check that the scrutinee type matches the enum
+                match scrutinee_ty {
+                    Ty::TypeCons(name, _) if name == enum_name => {
+                        // Find the enum definition to check the variant
+                        let enum_def = self.global_env.lookup_enum(enum_name).cloned();
+                        if let Some(enum_def) = enum_def {
+                            // Find the specific variant
+                            if let Some(variant) =
+                                enum_def.variants.iter().find(|v| &v.name == variant_name)
+                            {
+                                // If there's a payload pattern, check it against the variant's payload type
+                                if let Some(payload_pattern) = payload {
+                                    match &variant.payload {
+                                        EnumVariantPayload::None => {
+                                            return Err(SemanticError::TypeMismatch {
+                                                expected: Ty::Unit,
+                                                found: Ty::Any, // placeholder
+                                                location: location.clone(),
+                                            });
+                                        }
+                                        EnumVariantPayload::Tuple(types) if types.len() == 1 => {
+                                            let payload_ty = types[0].clone();
+                                            self.check_pattern(
+                                                env,
+                                                payload_pattern,
+                                                &payload_ty,
+                                                location.clone(),
+                                            )?;
+                                        }
+                                        EnumVariantPayload::Tuple(_) => {
+                                            // TODO: Handle multiple tuple elements
+                                            return Err(SemanticError::TypeMismatch {
+                                                expected: Ty::Any,
+                                                found: Ty::Any,
+                                                location: location.clone(),
+                                            });
+                                        }
+                                        EnumVariantPayload::Record(_) => {
+                                            // TODO: Handle record patterns
+                                            return Err(SemanticError::TypeMismatch {
+                                                expected: Ty::Any,
+                                                found: Ty::Any,
+                                                location: location.clone(),
+                                            });
+                                        }
+                                    }
+                                }
+                                Ok(())
+                            } else {
+                                Err(SemanticError::UndefinedVariable(format!(
+                                    "{}.{}",
+                                    enum_name, variant_name
+                                )))
+                            }
+                        } else {
+                            Err(SemanticError::UndefinedVariable(enum_name.clone()))
+                        }
+                    }
+                    _ => Err(SemanticError::TypeMismatch {
+                        expected: Ty::TypeCons(enum_name.clone(), vec![]),
+                        found: scrutinee_ty.clone(),
+                        location: location.clone(),
+                    }),
+                }
+            }
         }
     }
 
@@ -784,103 +874,123 @@ impl Typechecker {
     }
 
     fn infer_lam(&mut self, lam: &Expr, env: &mut TypingEnv, location: SourceLoc) -> Return<Ty> {
-        self.infer_lam_with_type(lam, env, location, None)
+        self.infer_lam_with_type(env, lam, None, location)
     }
 
     pub fn infer_lam_with_type(
         &mut self,
-        lam: &Expr,
         env: &mut TypingEnv,
-        location: SourceLoc,
+        lam: &Expr,
         expected_ty: Option<&Ty>,
+        location: SourceLoc,
     ) -> Return<Ty> {
-        if let Expr::Lam {
+        let Expr::Lam {
             args,
             return_ty,
             body,
         } = lam
-        {
-            // Enter a new scope for the lambda
-            self.resolver.push_scope();
+        else {
+            return Err(SemanticError::ExpectedLambda { location });
+        };
 
-            let mut arg_types = Vec::new();
+        // Enter new scope for lambda parameters
+        self.resolver.push_scope();
 
-            // Handle parameter type inference
-            let resolved_args = if let Some(Ty::Fn(expected_func)) = expected_ty {
-                if args.len() != expected_func.args.len() {
+        // Resolve parameter types
+        let resolved_args = self.resolve_lambda_params(args, expected_ty, &location)?;
+
+        // Add parameters to both resolver and typing environment
+        for (name, ty) in &resolved_args {
+            self.resolver
+                .define_variable(name.clone(), ty.clone())
+                .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
+            env.insert(name.clone(), ty.clone());
+        }
+
+        // Infer body type
+        let body_ty = self.infer_type(env, &body.target, body.loc.clone())?;
+
+        // Resolve return type
+        let final_return_ty = self.resolve_return_type(env, return_ty, &body_ty, &location)?;
+
+        self.resolver.pop_scope()?;
+
+        // Build and generalize function type
+        let func = Function::new_with_expr(
+            "lambda".to_string(),
+            resolved_args,
+            final_return_ty,
+            body.clone(),
+            vec![],
+        );
+
+        let func_ty = Ty::Fn(Box::new(func));
+        Ok(self.generalize(env, &func_ty))
+    }
+
+    fn resolve_lambda_params(
+        &mut self,
+        args: &[(String, Ty)],
+        expected_ty: Option<&Ty>,
+        location: &SourceLoc,
+    ) -> Return<Vec<(String, Ty)>> {
+        match expected_ty {
+            Some(Ty::Fn(func)) => {
+                // If we have an expected function type, use its argument types
+                if func.args.len() != args.len() {
                     return Err(SemanticError::ArityMismatch {
-                        expected: expected_func.args.len(),
+                        expected: func.args.len(),
                         found: args.len(),
                         location: location.clone(),
                     });
                 }
 
-                // If we have an expected function type, use it to resolve argument types
+                // Use expected parameter types
                 args.iter()
-                    .zip(expected_func.args.iter())
-                    .map(|((name, param_ty), (_, expected_param_ty))| -> Result<(String, Ty), SemanticError> {
-                        match param_ty {
-                            Ty::Unresolved => Ok((name.clone(), expected_param_ty.clone())),
+                    .zip(&func.args)
+                    .map(|((name, param_ty), (_, expected_param_ty))| {
+                        let resolved_ty = match param_ty {
+                            Ty::Unresolved => expected_param_ty.clone(),
                             _ => {
-                                self.unify(param_ty, expected_param_ty, location.clone())?;
-                                Ok((name.clone(), param_ty.clone()))
+                                self.unify(&param_ty, expected_param_ty, location.clone())?;
+                                param_ty.clone()
                             }
-                        }
+                        };
+                        Ok((name.clone(), resolved_ty))
                     })
-                    .collect::<Result<Vec<_>, _>>()?
-            } else {
-                // Handle case where we don't have an expected type
-                args.iter()
-                    .map(|(name, ty)| {
-                        if matches!(ty, Ty::Unresolved) {
-                            let var = Ty::Var(self.fresh());
-                            Ok((name.clone(), var))
-                        } else {
-                            Ok((name.clone(), ty.clone()))
-                        }
-                    })
-                    .collect::<Result<Vec<_>, _>>()?
-            };
-
-            // Define variables in the typing environment
-            for (name, ty) in &resolved_args {
-                self.resolver
-                    .define_variable(name.to_string(), ty.clone())
-                    .map_err(|_| SemanticError::RedefinedVariable(name.clone()))?;
-
-                arg_types.push((name.clone(), ty.clone()));
-                env.insert(name.clone(), ty.clone());
+                    .collect()
             }
+            _ => {
+                // No expected type, infer fresh variables
+                args.iter()
+                    .map(|(name, param_ty)| {
+                        let resolved_ty = match param_ty {
+                            Ty::Unresolved => Ty::Var(self.fresh()),
+                            _ => param_ty.clone(),
+                        };
+                        Ok((name.clone(), resolved_ty))
+                    })
+                    .collect()
+            }
+        }
+    }
 
-            // Infer the body type and unify with the return type
-            let body_ty = self.infer_type(env, &body.target, body.loc.clone())?;
-            let unified_return_ty = if matches!(return_ty, Ty::Unresolved) {
-                // If the return type is unresolved, we can unify it with the body type
-                body_ty.clone()
-            } else {
-                // Otherwise, unify explicit return type with body type
-                let subst = self.unify(&return_ty, &body_ty, location.clone())?;
+    fn resolve_return_type(
+        &mut self,
+        env: &mut TypingEnv,
+        declared_return_ty: &Ty,
+        body_ty: &Ty,
+        location: &SourceLoc,
+    ) -> Return<Ty> {
+        match declared_return_ty {
+            Ty::Unresolved => Ok(body_ty.clone()),
+            _ => {
+                // If we have a declared return type, unify it with the body type
+                let subst = self.unify(declared_return_ty, body_ty, location.clone())?;
                 env.extend(subst);
-                return_ty.clone()
-            };
 
-            self.resolver.pop_scope()?;
-
-            let func = Function::new_with_expr(
-                "lambda".to_string(),
-                resolved_args,
-                unified_return_ty,
-                body.clone(),
-                vec![],
-            );
-
-            // Generalize the function type if needed
-            let func_ty = Ty::Fn(Box::new(func));
-            let generalized_ty = self.generalize(env, &func_ty);
-
-            Ok(generalized_ty)
-        } else {
-            Err(SemanticError::ExpectedLambda { location: location })
+                Ok(declared_return_ty.clone())
+            }
         }
     }
 }
