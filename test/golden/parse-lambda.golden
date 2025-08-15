@@ -1,0 +1,7 @@
+SOURCE:
+-------------
+\x -> x + 1
+
+RESULT
+---------------
+Lam Lam {lamParams = fromList [("x",TyUnknown)], lamBody = Span {value = EBinOp Add (EIdent "x") (ELit (IntLit 1)), pos = SourcePos {sourceName = "<repl>", sourceLine = Pos 1, sourceColumn = Pos 1}}}

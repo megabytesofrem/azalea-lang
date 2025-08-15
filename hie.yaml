@@ -1,0 +1,10 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "azalea-compiler:lib"
+
+    - path: "./app/Main.hs"
+      component: "azalea-compiler:exe:azalea-compiler-exe"
+
+    - path: "./test"
+      component: "azalea-compiler:test:azalea-compiler-test"

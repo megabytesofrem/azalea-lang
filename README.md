@@ -1,0 +1,72 @@
+# Azalea
+
+Small language inspired by Haskell and Lua, that compiles to JS.
+
+## Status
+
+Azalea is currently heavily **work in progress** and not yet ready for end-user usage.
+
+## Rationale
+
+I wanted a language that I can personally use for a lot of small projects, so targeting Javascript was a necessity.
+
+Core design decisions:
+
+- You should almost _never_ need to specify types, despite being static typed
+- Everything is an expression, with few exceptions
+- Records map 1:1 to Javascript objects
+
+To allow type-safe code without the headache of having to manually type everything, Azalea employs a static
+type checker and type inference algorithm based off Hindley Milner and Algorithm W.
+
+## Syntax
+
+### Let and mut
+
+`let` immutably binds a name within the current scope, `mut` mutably binds.
+
+```rs
+let name: Ty = value
+let name = value
+
+mut count = 0
+```
+
+### Functions
+
+`fn` is used for declaring functions. They can either return a single expression, or a block of statements.
+`fn` is also used as a type for higher-order functions i.e `fn(int -> int)`.
+
+```lua
+fn greet(name: String) = "Hello " + name
+fn blocky() = do
+  ..
+end
+
+fn adder(g: Int, h: Int) = g + h
+fn apply_adder(f: fn(Int) -> Int, g: Int, h: Int) = f(g,h)
+
+-- Lambda functions
+let add_lam = \(x, y) -> x + y
+apply_adder(adder, 1, 2) -- => 3
+apply_adder(add_lam, 1, 2) -- => 3
+```
+
+### Records and enums
+
+`record` is used to define a record (or struct), and `enum` defines an enumeration.
+
+```cs
+record Counter = {
+  count: Int
+}
+
+enum Colors =
+    Red
+  | Green
+  | Blue
+  | Hex(String)
+
+fn increment(c: Counter) = c.count += 1
+let primary_colour = Colors.Red
+```
