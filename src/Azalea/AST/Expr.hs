@@ -28,6 +28,12 @@ data Record = Record
   }
   deriving (Show)
 
+data Enum_ = Enum_
+  { enumName :: Text
+  , enumVariants :: M.Map Text (Span Expr) -- Variants of the enum with their associated expressions
+  }
+  deriving (Show)
+
 data Literal
   = IntLit Integer
   | FloatLit Double

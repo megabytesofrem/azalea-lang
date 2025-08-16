@@ -35,6 +35,7 @@ library
       Azalea.Typecheck
       Azalea.Typecheck.Algorithm
       Azalea.Typecheck.Core
+      Azalea.Typecheck.Scope
   other-modules:
       Paths_azalea_compiler
   autogen-modules:
@@ -100,6 +101,7 @@ test-suite azalea-compiler-test
       Azalea.Typecheck
       Azalea.Typecheck.Algorithm
       Azalea.Typecheck.Core
+      Azalea.Typecheck.Scope
       Paths_azalea_compiler
   autogen-modules:
       Paths_azalea_compiler

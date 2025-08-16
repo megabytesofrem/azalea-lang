@@ -13,7 +13,9 @@ module Azalea.Typecheck.Core
   , unTypechecker
   ) where
 
-import Azalea.AST.Types (Ty (..))
+import Azalea.AST.Types (BOp (..), Ty (..))
+import Azalea.Typecheck.Scope (Scope, defineFuncInScope, defineVarInScope, lookupFuncInScope, lookupVarInScope, mkScope)
+import Control.Applicative (asum)
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Map qualified as M
@@ -28,6 +30,7 @@ type TypeEnv = M.Map Text Ty
 data TypecheckState = TypecheckState
   { env :: TypeEnv
   , freshCounter :: Int
+  , scopes :: [Scope]
   }
 
 -- Typechecker monad, a stateful monad that can throw errors
@@ -72,3 +75,53 @@ collectTypeParams ty = case ty of
   TyCons _ params -> concat <$> traverse collectTypeParams (V.toList params)
   TyArray elemType -> collectTypeParams elemType
   _ -> pure []
+
+-- SCOPE RESOLUTION
+
+pushScope :: Scope -> Typechecker ()
+pushScope scope = modify (\s -> s{scopes = scope : scopes s})
+
+popScope :: Typechecker ()
+popScope = do
+  st <- get
+  case scopes st of
+    [] -> throwError "Cannot pop the empty scope stack"
+    (_ : rest) -> put st{scopes = rest}
+
+lookupVariable :: Text -> Typechecker (Maybe Ty)
+lookupVariable name = gets $ \st -> asum $ map (\scope -> lookupVarInScope scope (T.unpack name)) (scopes st)
+
+lookupFunction :: Text -> Typechecker (Maybe ([Ty], Ty))
+lookupFunction name = gets $ \st -> asum $ map (\scope -> lookupFuncInScope scope (T.unpack name)) (scopes st)
+
+defineVariable :: Text -> Ty -> Typechecker ()
+defineVariable name ty = do
+  st <- get
+  case scopes st of
+    [] -> throwError "No current scope to define variable in"
+    (currScope : rest) ->
+      case defineVarInScope (T.unpack name) ty currScope of
+        Left err -> throwError err
+        Right newScope -> put st{scopes = newScope : rest}
+
+defineFunction :: Text -> [Ty] -> Ty -> Typechecker ()
+defineFunction name params returnType = do
+  st <- get
+  case scopes st of
+    [] -> throwError "No current scope to define function in"
+    (currScope : rest) ->
+      case defineFuncInScope currScope (T.unpack name) params returnType of
+        Left err -> throwError err
+        Right newScope -> put st{scopes = newScope : rest}
+
+clearScopes :: Typechecker ()
+clearScopes = modify (\s -> s{scopes = [mkScope "default" Nothing]})
+
+opIsComparison :: BOp -> Bool
+opIsComparison Eq = True
+opIsComparison Neq = True
+opIsComparison Gt = True
+opIsComparison Lt = True
+opIsComparison Gte = True
+opIsComparison Lte = True
+opIsComparison _ = False
