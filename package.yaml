@@ -25,6 +25,7 @@ dependencies:
   - text
   - vector
   - containers
+  - mtl
   - parser-combinators
   - megaparsec >= 7.0.0
   - prettyprinter

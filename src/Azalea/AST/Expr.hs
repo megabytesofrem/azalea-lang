@@ -65,7 +65,6 @@ deriving instance Eq Expr
 deriving instance Eq Member
 deriving instance Eq Record
 deriving instance Eq Lam
-deriving instance Eq Ty
 
 instance (Eq a) => Eq (Function a) where
   (Function name params ret body) == (Function name' params' ret' body') =

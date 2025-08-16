@@ -16,8 +16,12 @@ data Ty
   | TyUnit
   | TyArray Ty
   | TyFn [Ty] Ty
+  | TyVar Text -- Type variable
   | TyCons Text (V.Vector Ty)
+  | TyForAll [Text] Ty -- Forall quantification
+  | TyAny
   | TyUnknown -- Placeholder for resolving types
+  deriving (Eq)
 
 -- These are not cylic, so we can derive Show for them
 data BOp
@@ -55,6 +59,9 @@ instance Show Ty where
   show (TyFn params ret) = "(" ++ unwords (map show params) ++ ") -> " ++ show ret
   show (TyCons name args) = T.unpack name ++ "[" ++ unwords (map show (V.toList args)) ++ "]"
   show TyUnknown = "Unknown"
+  show TyAny = "Any"
+  show (TyVar name) = T.unpack name
+  show (TyForAll vars body) = "forall " ++ unwords (map T.unpack vars) ++ ". " ++ show body
 
 instance Show BOp where
   show Add = "+"
