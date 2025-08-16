@@ -33,6 +33,8 @@ library
       Azalea.Parser
       Azalea.Pretty
       Azalea.Typecheck
+      Azalea.Typecheck.Algorithm
+      Azalea.Typecheck.Core
   other-modules:
       Paths_azalea_compiler
   autogen-modules:
@@ -96,6 +98,8 @@ test-suite azalea-compiler-test
       Azalea.Parser
       Azalea.Pretty
       Azalea.Typecheck
+      Azalea.Typecheck.Algorithm
+      Azalea.Typecheck.Core
       Paths_azalea_compiler
   autogen-modules:
       Paths_azalea_compiler
