@@ -1,7 +1,7 @@
 SOURCE:
 -------------
-\x -> x + 1
+mut x: Int = 1
 
 RESULT
 ---------------
-\x -> (x + 1) @ 1:1
+mut x : Int = 1

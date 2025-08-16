@@ -4,4 +4,4 @@ SOURCE:
 
 RESULT
 ---------------
-Lam Lam {lamParams = fromList [("x",TyUnknown),("y",TyUnknown)], lamBody = Span {value = EBinOp Add (EIdent "x") (EIdent "y"), pos = SourcePos {sourceName = "<repl>", sourceLine = Pos 1, sourceColumn = Pos 1}}}
+\x, y -> (x + y) @ 1:1

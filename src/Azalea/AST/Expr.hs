@@ -1,11 +1,37 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Azalea.AST.Expr (Literal (..), Expr (..), Member (..)) where
+module Azalea.AST.Expr
+  ( Literal (..)
+  , Expr (..)
+  , Member (..)
+  , Record (..)
+  , Lam (..)
+  , Function (..)
+  ) where
 
 import Azalea.AST.Span (Span (..))
-import Azalea.AST.Types (BOp (..), Function (..), Lam (..), Record (..), Ty (..), UOp (..))
+import Azalea.AST.Types (BOp (..), Ty (..), UOp (..))
+import Data.Map qualified as M
 import Data.Text (Text)
+
+data Function body = Function
+  { funcName :: Text -- Name of the function
+  , funcParams :: M.Map Text Ty -- List of parameter names and their types
+  , funcReturnType :: Ty
+  , funcBody :: body -- Only used if the function consists of a block
+  }
+
+-- | A record type - synonymous with a JS object
+data Record = Record
+  { recordName :: Text
+  , recordFields :: M.Map Text (Span Expr)
+  }
+
+data Lam = Lam
+  { lamParams :: M.Map Text Ty -- List of parameter names
+  , lamBody :: Span Expr -- The body of the lambda expression
+  }
 
 data Literal
   = IntLit Integer
@@ -34,18 +60,13 @@ data Member = Member
 
 -- Use StandaloneDeriving to create Show and Eq instances for types from AST.Types
 -- since we have cyclic dependencies with AST.Types
-deriving instance Show Literal
-deriving instance Show Expr
-deriving instance Show Member
-deriving instance Show Function
-deriving instance Show Record
-deriving instance Show Lam
-deriving instance Show Ty
-
 deriving instance Eq Literal
 deriving instance Eq Expr
 deriving instance Eq Member
-deriving instance Eq Function
 deriving instance Eq Record
 deriving instance Eq Lam
 deriving instance Eq Ty
+
+instance (Eq a) => Eq (Function a) where
+  (Function name params ret body) == (Function name' params' ret' body') =
+    name == name' && params == params' && ret == ret' && body == body'

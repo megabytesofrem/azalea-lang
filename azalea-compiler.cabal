@@ -25,10 +25,13 @@ source-repository head
 
 library
   exposed-modules:
+      Azalea.AST
       Azalea.AST.Expr
       Azalea.AST.Span
+      Azalea.AST.Stmt
       Azalea.AST.Types
       Azalea.Parser
+      Azalea.Pretty
   other-modules:
       Paths_azalea_compiler
   autogen-modules:
@@ -82,10 +85,13 @@ test-suite azalea-compiler-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Azalea.AST
       Azalea.AST.Expr
       Azalea.AST.Span
+      Azalea.AST.Stmt
       Azalea.AST.Types
       Azalea.Parser
+      Azalea.Pretty
       Paths_azalea_compiler
   autogen-modules:
       Paths_azalea_compiler

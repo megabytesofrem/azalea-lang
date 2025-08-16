@@ -2,34 +2,11 @@ module Azalea.AST.Types
   ( Ty (..)
   , BOp (..)
   , UOp (..)
-  , Function (..)
-  , Record (..)
-  , Lam (..)
   ) where
 
-import {-# SOURCE #-} Azalea.AST.Expr (Expr)
-import Azalea.AST.Span (Span)
-import Data.Map qualified as M
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Vector qualified as V
-
-data Function = Function
-  { funcName :: Text -- Name of the function
-  , funcParams :: M.Map Text Ty -- List of parameter names and their types
-  , funcReturnType :: Ty
-  , funcBody :: Span Expr
-  }
-
--- | A record type - synonymous with a JS object
-data Record = Record
-  { recordName :: Text
-  , recordFields :: M.Map Text (Span Expr)
-  }
-
-data Lam = Lam
-  { lamParams :: M.Map Text Ty -- List of parameter names
-  , lamBody :: Span Expr -- The body of the lambda expression
-  }
 
 data Ty
   = TyInt
@@ -38,7 +15,7 @@ data Ty
   | TyBool
   | TyUnit
   | TyArray Ty
-  | TyFn Function
+  | TyFn [Ty] Ty
   | TyCons Text (V.Vector Ty)
   | TyUnknown -- Placeholder for resolving types
 
@@ -59,9 +36,43 @@ data BOp
   | Lte
   | PlusEq
   | MinusEq
-  deriving (Show, Eq)
+  deriving (Eq)
 
 data UOp
   = Neg -- Negation
   | Not -- Prefix not
-  deriving (Show, Eq)
+  deriving (Eq)
+
+-- Show instances
+
+instance Show Ty where
+  show TyInt = "Int"
+  show TyFloat = "Float"
+  show TyString = "String"
+  show TyBool = "Bool"
+  show TyUnit = "Unit"
+  show (TyArray elemType) = "Array(" ++ show elemType ++ ")"
+  show (TyFn params ret) = "(" ++ unwords (map show params) ++ ") -> " ++ show ret
+  show (TyCons name args) = T.unpack name ++ "[" ++ unwords (map show (V.toList args)) ++ "]"
+  show TyUnknown = "Unknown"
+
+instance Show BOp where
+  show Add = "+"
+  show Sub = "-"
+  show Mul = "*"
+  show Div = "/"
+  show Mod = "%"
+  show And = "&&"
+  show Or = "||"
+  show Eq = "=="
+  show Neq = "!="
+  show Gt = ">"
+  show Lt = "<"
+  show Gte = ">="
+  show Lte = "<="
+  show PlusEq = "+="
+  show MinusEq = "-="
+
+instance Show UOp where
+  show Neg = "-"
+  show Not = "!"

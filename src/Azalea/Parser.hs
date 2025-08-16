@@ -2,18 +2,23 @@
 
 module Azalea.Parser
   ( parseExpr
+  , parseExprSpanned
+  , runParse
   -- Export the Parser type and custom error
   , Parser
   , ParserError (..)
   ) where
 
-import Azalea.AST.Expr (Expr (..), Literal (..))
-import Azalea.AST.Span (mkSpanned)
-import Azalea.AST.Types (BOp (..), Lam (..), Ty (..))
+import Azalea.AST.Expr (Expr (..), Function (..), Lam (..), Literal (..), Record (..))
+import Azalea.AST.Span (Span, mkSpanned)
 import Control.Monad.Combinators.Expr
 
+import Azalea.AST.Stmt (Stmt (..), ToplevelStmt (..))
+import Azalea.AST.Types
 import Data.Map qualified as M
+import Data.Maybe (fromJust)
 import Data.Text (Text, pack, unpack)
+import Data.Vector qualified as V
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -42,6 +47,12 @@ lexeme = L.lexeme spaceConsumer
 symbol :: Text -> Parser Text
 symbol = L.symbol spaceConsumer
 
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
+
+reservedTypes :: [Text]
+reservedTypes = ["Int", "Float", "String", "Bool", "Unit", "Array"]
+
 -- Parse a single identifier
 pIdent :: Parser Text
 pIdent = lexeme $ do
@@ -57,6 +68,17 @@ pType =
     <|> (symbol "Bool" >> pure TyBool)
     <|> (symbol "Unit" >> pure TyUnit)
     <|> (symbol "Array" >> symbol "[" *> (TyArray <$> pType) <* symbol "]")
+    <|> userDefined
+ where
+  -- Parse user-defined types
+  userDefined = do
+    ident <- pIdent
+    args <- optional (between (symbol "[") (symbol "]") (pType `sepBy` symbol ","))
+    if ident `elem` reservedTypes
+      then do
+        pos <- getSourcePos
+        customFailure (ParseError ("Reserved type " <> ident) pos)
+      else pure (TyCons ident (maybe V.empty V.fromList args))
 
 pIntLit :: Parser Literal
 pIntLit = do
@@ -192,13 +214,161 @@ pLambda = do
     mty <- optional (symbol ":" >> pType)
     pure (ident, maybe TyUnknown id mty)
 
+pRecord :: Parser Expr
+pRecord = do
+  pos <- getSourcePos
+  ident <- pIdent <|> symbol "."
+  fields <- between (symbol "{") (symbol "}") ((pField pos) `sepBy` symbol ",")
+  pure $ ERecord (Record ident (M.fromList fields))
+
+pField :: SourcePos -> Parser (Text, Span Expr)
+pField pos = do
+  fieldName <- pIdent
+  _ <- symbol ":"
+  fieldValue <- parseExpr
+  pure (fieldName, mkSpanned fieldValue pos)
+
 pTerm :: Parser Expr
 pTerm =
   try
     (ELit <$> pLiteral) -- 12, "hello", [1,2,3]
+    <|> try (parens parseExpr) -- Parenthesized expressions
     <|> (EIdent <$> pIdent) -- Identifiers
     <|> pIf -- If expressions
     <|> pLambda -- Lambda expressions
+    <|> pRecord -- Record expressions
+
+-- Statements
+pLet :: Parser Stmt
+pLet = do
+  _pos <- getSourcePos
+  _ <- symbol "let"
+  name <- unpack <$> pIdent
+  ty <- optional (symbol ":" >> pType)
+  _ <- symbol "="
+  expr <- parseExpr
+  pure $ Let name (maybe TyUnknown id ty) expr
+
+pMut :: Parser Stmt
+pMut = do
+  pos <- getSourcePos
+  _ <- symbol "mut"
+  name <- unpack <$> pIdent
+  ty <- optional (symbol ":" >> pType)
+  _ <- symbol "="
+  expr <- parseExpr
+  pure $ Mut name (maybe TyUnknown id ty) expr
+
+pAssign :: Parser Stmt
+pAssign = do
+  pos <- getSourcePos
+  name <- unpack <$> pIdent
+  _ <- symbol "="
+  expr <- parseExpr
+  pure $ Assign name expr
+
+pFor :: Parser Stmt
+pFor = do
+  pos <- getSourcePos
+  _ <- symbol "for"
+  iterVar <- unpack <$> pIdent
+  _ <- symbol "in"
+  iterExpr <- parseExpr
+  body <- parseBlock
+  pure $ For iterVar iterExpr body
+
+pRecordDecl :: Parser ToplevelStmt
+pRecordDecl = do
+  pos <- getSourcePos
+  _ <- symbol "record"
+  name <- pIdent
+  _ <- symbol "="
+  fields <- between (symbol "{") (symbol "}") ((pField pos) `sepBy` symbol ",")
+  pure $ RecordDecl (Record name (M.fromList fields))
+
+pFnParams :: Parser [(Text, Ty)]
+pFnParams = parensArg
+ where
+  pArg = do
+    ident <- pIdent
+    mty <- optional (symbol ":" >> pType)
+    pure (ident, maybe TyUnknown id mty)
+
+  parensArg = between (symbol "(") (symbol ")") (pArg `sepBy` symbol ",")
+
+pFnDeclWithBlock :: Parser ToplevelStmt
+pFnDeclWithBlock = do
+  pos <- getSourcePos
+  _ <- symbol "fn"
+  name <- pIdent
+  args <- pFnParams
+  let args' = M.fromList args
+  retTy <- optional (symbol "->") *> optional (symbol ":" >> pType)
+  body <- parseBlock
+  pure $ mkFunc name args' retTy body
+ where
+  mkFunc :: Text -> M.Map Text Ty -> Maybe Ty -> V.Vector Stmt -> ToplevelStmt
+  mkFunc name args' retTy body
+    | retTy == Nothing = FnDecl (Function name args' TyUnknown body)
+    | otherwise = FnDecl (Function name args' (fromJust retTy) body)
+
+pFnDeclWithExpr :: Parser ToplevelStmt
+pFnDeclWithExpr = do
+  pos <- getSourcePos
+  _ <- symbol "fn"
+  name <- pIdent
+  args <- pFnParams
+  let args' = M.fromList args
+  retTy <- optional (symbol "->") *> optional (symbol ":" >> pType)
+  _ <- symbol "="
+  expr <- parseExpr
+  pure $ mkFunc name args' retTy expr
+ where
+  mkFunc :: Text -> M.Map Text Ty -> Maybe Ty -> Expr -> ToplevelStmt
+  mkFunc name args' retTy body
+    | retTy == Nothing = FnDecl (Function name args' TyUnknown (V.singleton (ExprStmt body)))
+    | otherwise = FnDecl (Function name args' (fromJust retTy) (V.singleton (ExprStmt body)))
+
+pFnDecl :: Parser ToplevelStmt
+pFnDecl =
+  try pFnDeclWithBlock <|> try pFnDeclWithExpr
+
+-- Parse a block of statements
+parseBlock :: Parser (V.Vector Stmt)
+parseBlock = do
+  _ <- symbol "do"
+  stmts <- many (parseStmt <* spaceConsumer)
+  _ <- symbol "end"
+  pure $ V.fromList stmts
+
+-- Parse a statement (let, mut, assign, for, or expression statement)
+parseStmt :: Parser Stmt
+parseStmt =
+  try pLet
+    <|> try pMut
+    <|> try pAssign
+    <|> try pFor
+    <|> try (ExprStmt <$> parseExpr)
+
+-- Parse a top-level statement, which can be a function, record declaration, or a statement
+parseToplevelStmt :: Parser ToplevelStmt
+parseToplevelStmt =
+  try pFnDecl
+    <|> try pRecordDecl
+    <|> try pFnDecl
+    <|> (AStmt <$> parseStmt)
 
 parseExpr :: Parser Expr
 parseExpr = makeExprParser pTerm operators
+
+-- `parseExpr`, but spanned with source position
+parseExprSpanned :: Parser (Span Expr)
+parseExprSpanned = do
+  pos <- getSourcePos
+  expr <- parseExpr
+  pure $ mkSpanned expr pos
+
+-- Run the parser on a given input string
+runParse :: Text -> Either (ParseErrorBundle Text ParserError) ToplevelStmt
+runParse input =
+  parse parseToplevelStmt "<input>" input

@@ -6,7 +6,7 @@ data Span a = Span
   { value :: a
   , pos :: SourcePos
   }
-  deriving (Show, Eq)
+  deriving (Eq, Ord)
 
 -- | Create a value wrapped in a `Span` with the given source position.
 mkSpanned :: a -> SourcePos -> Span a

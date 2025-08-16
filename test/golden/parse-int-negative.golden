@@ -4,4 +4,4 @@ SOURCE:
 
 RESULT
 ---------------
-Error: ParseErrorBundle {bundleErrors = TrivialError 0 (Just (Tokens ('-' :| "1"))) (fromList [Tokens ('"' :| ""),Tokens ('[' :| ""),Tokens ('\\' :| ""),Tokens ('i' :| "f"),Label ('d' :| "igit"),Label ('l' :| "etter")]) :| [], bundlePosState = PosState {pstateInput = "-123", pstateOffset = 0, pstateSourcePos = SourcePos {sourceName = "<repl>", sourceLine = Pos 1, sourceColumn = Pos 1}, pstateTabWidth = Pos 8, pstateLinePrefix = ""}}
+Error: ParseErrorBundle {bundleErrors = TrivialError 0 (Just (Tokens ('-' :| "123"))) (fromList [Tokens ('"' :| ""),Tokens ('(' :| ""),Tokens ('.' :| ""),Tokens ('[' :| ""),Tokens ('\\' :| ""),Tokens ('f' :| "n"),Tokens ('f' :| "or"),Tokens ('i' :| "f"),Tokens ('l' :| "et"),Tokens ('m' :| "ut"),Tokens ('r' :| "ecord"),Label ('d' :| "igit"),Label ('l' :| "etter")]) :| [], bundlePosState = PosState {pstateInput = "-123", pstateOffset = 0, pstateSourcePos = SourcePos {sourceName = "<input>", sourceLine = Pos 1, sourceColumn = Pos 1}, pstateTabWidth = Pos 8, pstateLinePrefix = ""}}
