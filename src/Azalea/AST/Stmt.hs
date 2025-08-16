@@ -18,8 +18,10 @@ data Stmt
   | For String Expr Block
   | While Expr Block
   | ExprStmt Expr
+  deriving (Eq, Show)
 
 data ToplevelStmt
   = AStmt Stmt
   | RecordDecl Record
   | FnDecl (Function Block)
+  deriving (Show)

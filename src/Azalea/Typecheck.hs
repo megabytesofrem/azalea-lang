@@ -1,6 +1,16 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TupleSections #-}
 
-module Azalea.Typecheck where
+module Azalea.Typecheck
+  ( Typechecker
+  , TypecheckState (..)
+  , TypeEnv
+  , lookupVar
+  , insertVar
+  -- Run the typechecker
+  , runTypechecker
+  )
+where
 
 import Azalea.AST.Types (Ty (..))
 import Control.Monad (zipWithM)
@@ -15,12 +25,16 @@ import Data.Vector qualified as V
 -- Type environment mapping variable names to types.
 type TypeEnv = M.Map Text Ty
 
-data TypecheckState = TCState
+data TypecheckState = TypecheckState
   { env :: TypeEnv
   , freshCounter :: Int
   }
 
-type Typechecker a = StateT TypecheckState (Except String) a
+-- Typechecker monad, a stateful monad that can throw errors
+newtype Typechecker a = Typechecker
+  { unTypechecker :: StateT TypecheckState (Except String) a
+  }
+  deriving (Functor, Applicative, Monad, MonadState TypecheckState, MonadError String)
 
 lookupVar :: Text -> Typechecker (Maybe Ty)
 lookupVar name = gets (M.lookup name . env)
@@ -126,4 +140,4 @@ areVoidEquiv _ _ = False
 
 -- | Run the typechecker with an initial state.
 runTypechecker :: Typechecker a -> TypecheckState -> Either String (a, TypecheckState)
-runTypechecker m s = runExcept (runStateT m s)
+runTypechecker m s = runExcept (runStateT (unTypechecker m) s)

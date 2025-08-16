@@ -4,9 +4,7 @@
 module Azalea.AST.Expr
   ( Literal (..)
   , Expr (..)
-  , Member (..)
   , Record (..)
-  , Lam (..)
   , Function (..)
   ) where
 
@@ -21,17 +19,14 @@ data Function body = Function
   , funcReturnType :: Ty
   , funcBody :: body -- Only used if the function consists of a block
   }
+  deriving (Show)
 
 -- | A record type - synonymous with a JS object
 data Record = Record
   { recordName :: Text
   , recordFields :: M.Map Text (Span Expr)
   }
-
-data Lam = Lam
-  { lamParams :: M.Map Text Ty -- List of parameter names
-  , lamBody :: Span Expr -- The body of the lambda expression
-  }
+  deriving (Show)
 
 data Literal
   = IntLit Integer
@@ -39,33 +34,26 @@ data Literal
   | StringLit Text
   | ArrayLit [Span Expr] -- Array literal
   | BoolLit Bool
+  deriving (Show)
 
 data Expr
   = ELit Literal -- A literal value
   | EIdent Text -- An identifier (variable name)
-  | EMember Member
+  | EMember Text (Span Expr) -- Member access, e.g., `obj.member`
   | EBinOp BOp Expr Expr
   | EUnaryOp UOp Expr
   | ERecord Record
   | ECall Expr [Expr]
   | EArrayIndex Expr Expr
-  | ELam Lam
+  | ELam (M.Map Text Ty) (Span Expr)
   | EIf Expr Expr Expr
-
--- | Member access for records/enums
-data Member = Member
-  { memberName :: Text
-  , memberTarget :: Span Expr
-  }
+  deriving (Show)
 
 -- Use StandaloneDeriving to create Show and Eq instances for types from AST.Types
 -- since we have cyclic dependencies with AST.Types
 deriving instance Eq Literal
 deriving instance Eq Expr
-deriving instance Eq Member
 deriving instance Eq Record
-deriving instance Eq Lam
-
 instance (Eq a) => Eq (Function a) where
   (Function name params ret body) == (Function name' params' ret' body') =
     name == name' && params == params' && ret == ret' && body == body'

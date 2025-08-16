@@ -1,0 +1,7 @@
+SOURCE:
+-------------
+while x < 10 do x + 1 end
+
+RESULT
+---------------
+while (x < 10) do (x + 1)

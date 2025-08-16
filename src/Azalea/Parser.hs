@@ -9,7 +9,7 @@ module Azalea.Parser
   , ParserError (..)
   ) where
 
-import Azalea.AST.Expr (Expr (..), Function (..), Lam (..), Literal (..), Record (..))
+import Azalea.AST.Expr (Expr (..), Function (..), Literal (..), Record (..))
 import Azalea.AST.Span (Span, mkSpanned)
 import Control.Monad.Combinators.Expr
 
@@ -50,15 +50,21 @@ symbol = L.symbol spaceConsumer
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+-- Reserved keywords and types
+reservedWords :: [Text]
+reservedWords = ["if", "then", "else", "for", "while", "do", "end", "let", "mut", "fn", "record"]
+
 reservedTypes :: [Text]
-reservedTypes = ["Int", "Float", "String", "Bool", "Unit", "Array"]
+reservedTypes = ["Int", "Float", "String", "Bool", "Unit", "Array", "Fn"]
 
 -- Parse a single identifier
 pIdent :: Parser Text
 pIdent = lexeme $ do
-  first <- letterChar
-  rest <- many (alphaNumChar <|> char '_')
-  pure . pack $ (first : rest)
+  ident <- some (letterChar <|> char '_')
+  let id' = pack ident
+  if id' `elem` reservedWords
+    then fail $ "Reserved word: " ++ unpack id' ++ " cannot be used as an identifier"
+    else pure id'
 
 pType :: Parser Ty
 pType =
@@ -68,6 +74,11 @@ pType =
     <|> (symbol "Bool" >> pure TyBool)
     <|> (symbol "Unit" >> pure TyUnit)
     <|> (symbol "Array" >> symbol "[" *> (TyArray <$> pType) <* symbol "]")
+    <|> ( symbol "Fn" >> do
+            params <- between (symbol "[") (symbol "]") (pType `sepBy` symbol ",")
+            ret <- pType
+            pure $ TyFn params ret
+        )
     <|> userDefined
  where
   -- Parse user-defined types
@@ -202,7 +213,7 @@ pLambda = do
   _ <- symbol "->"
   body <- parseExpr
 
-  pure $ ELam (Lam args' (mkSpanned body pos))
+  pure $ ELam args' (mkSpanned body pos)
  where
   parensArg = between (symbol "(") (symbol ")") (pArg `sepBy` symbol ",")
   -- Single argument has a unknown type
@@ -241,7 +252,6 @@ pTerm =
 -- Statements
 pLet :: Parser Stmt
 pLet = do
-  _pos <- getSourcePos
   _ <- symbol "let"
   name <- unpack <$> pIdent
   ty <- optional (symbol ":" >> pType)
@@ -251,7 +261,6 @@ pLet = do
 
 pMut :: Parser Stmt
 pMut = do
-  pos <- getSourcePos
   _ <- symbol "mut"
   name <- unpack <$> pIdent
   ty <- optional (symbol ":" >> pType)
@@ -261,7 +270,6 @@ pMut = do
 
 pAssign :: Parser Stmt
 pAssign = do
-  pos <- getSourcePos
   name <- unpack <$> pIdent
   _ <- symbol "="
   expr <- parseExpr
@@ -269,13 +277,19 @@ pAssign = do
 
 pFor :: Parser Stmt
 pFor = do
-  pos <- getSourcePos
   _ <- symbol "for"
   iterVar <- unpack <$> pIdent
   _ <- symbol "in"
   iterExpr <- parseExpr
   body <- parseBlock
   pure $ For iterVar iterExpr body
+
+pWhile :: Parser Stmt
+pWhile = do
+  _ <- symbol "while"
+  cond <- parseExpr
+  body <- parseBlock
+  pure $ While cond body
 
 pRecordDecl :: Parser ToplevelStmt
 pRecordDecl = do
@@ -298,7 +312,6 @@ pFnParams = parensArg
 
 pFnDeclWithBlock :: Parser ToplevelStmt
 pFnDeclWithBlock = do
-  pos <- getSourcePos
   _ <- symbol "fn"
   name <- pIdent
   args <- pFnParams
@@ -314,7 +327,6 @@ pFnDeclWithBlock = do
 
 pFnDeclWithExpr :: Parser ToplevelStmt
 pFnDeclWithExpr = do
-  pos <- getSourcePos
   _ <- symbol "fn"
   name <- pIdent
   args <- pFnParams
@@ -348,6 +360,7 @@ parseStmt =
     <|> try pMut
     <|> try pAssign
     <|> try pFor
+    <|> try pWhile
     <|> try (ExprStmt <$> parseExpr)
 
 -- Parse a top-level statement, which can be a function, record declaration, or a statement

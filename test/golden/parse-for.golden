@@ -4,4 +4,4 @@ for x in xs do x + 1 end
 
 RESULT
 ---------------
-for
+for x in xs do (x + 1)
