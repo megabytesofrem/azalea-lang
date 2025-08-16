@@ -5,12 +5,13 @@ import Data.Text qualified as T
 
 -- Use golden tests (snapshot testing) to verify the test results
 
-import Azalea.Parser (runParse)
+import Azalea.Parser (pType, runParse)
 import Azalea.Pretty (PP (..))
 import Prettyprinter
 import Prettyprinter.Render.String (renderString)
 import Test.Tasty
 import Test.Tasty.Golden (goldenVsString)
+import Text.Megaparsec (parse)
 
 -- | Create a golden test/snapshot that includes the source code and the result
 snapSource :: (Show e, PP t) => TestName -> FilePath -> String -> Either e t -> TestTree
@@ -48,7 +49,23 @@ exprParserTests :: TestTree
 exprParserTests =
   testGroup
     "parser"
-    [ -- Int parsing tests
+    [ -- Type parsing tests
+      snapSource
+        "parseExpr Int"
+        "test/golden/parse-type-01.golden"
+        "Int"
+        (parse pType "<input>" (T.pack "Int"))
+    , snapSource
+        "parseExpr List[Int]"
+        "test/golden/parse-type-02.golden"
+        "List[Int]"
+        (parse pType "<input>" (T.pack "List[Int]"))
+    , snapSource
+        "parseExpr List[List[Int]]"
+        "test/golden/parse-type-03.golden"
+        "List[List[Int]]"
+        (parse pType "<input>" (T.pack "List[List[Int]]"))
+    , -- Int parsing tests
       snapSource
         "parseExpr 123"
         "test/golden/parse-int-123.golden"

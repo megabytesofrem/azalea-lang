@@ -4,6 +4,7 @@ module Azalea.Parser
   ( parseExpr
   , parseExprSpanned
   , runParse
+  , pType
   -- Export the Parser type and custom error
   , Parser
   , ParserError (..)
@@ -18,6 +19,7 @@ import Azalea.AST.Types
 import Data.Map qualified as M
 import Data.Maybe (fromJust)
 import Data.Text (Text, pack, unpack)
+import Data.Text qualified as T
 import Data.Vector qualified as V
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -57,13 +59,18 @@ reservedWords = ["if", "then", "else", "for", "while", "do", "end", "let", "mut"
 reservedTypes :: [Text]
 reservedTypes = ["Int", "Float", "String", "Bool", "Unit", "Array", "Fn"]
 
+raise :: String -> Parser a
+raise msg = do
+  pos <- getSourcePos
+  customFailure (ParseError (T.pack msg) pos)
+
 -- Parse a single identifier
 pIdent :: Parser Text
 pIdent = lexeme $ do
   ident <- some (letterChar <|> char '_')
   let id' = pack ident
   if id' `elem` reservedWords
-    then fail $ "Reserved word: " ++ unpack id' ++ " cannot be used as an identifier"
+    then raise $ "Reserved word: " ++ T.unpack id' ++ " cannot be used as an identifier"
     else pure id'
 
 pType :: Parser Ty
@@ -86,9 +93,7 @@ pType =
     ident <- pIdent
     args <- optional (between (symbol "[") (symbol "]") (pType `sepBy` symbol ","))
     if ident `elem` reservedTypes
-      then do
-        pos <- getSourcePos
-        customFailure (ParseError ("Reserved type " <> ident) pos)
+      then raise $ "Reserved type: " ++ T.unpack ident ++ " cannot be used as a type"
       else pure (TyCons ident (maybe V.empty V.fromList args))
 
 pIntLit :: Parser Literal
@@ -96,9 +101,7 @@ pIntLit = do
   int <- lexeme . some $ digitChar
   case reads (unpack . pack $ int) of
     [(n, "")] -> pure . IntLit $ n
-    _ -> do
-      pos <- getSourcePos
-      customFailure (ParseError "Invalid integer format" pos)
+    _ -> raise $ "Invalid integer format: " ++ int
 
 pFloatLit :: Parser Literal
 pFloatLit = do
@@ -111,9 +114,7 @@ pFloatLit = do
   -- Parse the float and check if it is valid
   case reads (unpack . pack $ flt) of
     [(n, "")] -> pure . FloatLit $ n
-    _ -> do
-      pos <- getSourcePos
-      customFailure (ParseError "Invalid float format" pos)
+    _ -> raise $ "Invalid float format: " ++ flt
 
 pStringLit :: Parser Literal
 pStringLit = do
